@@ -2,33 +2,53 @@
 
 Contributed by Anders Holtsberg \<<anders.holtsberg@gmail.com>\>
 
+An open-source electric molyphonic guitar pitch tracker. A better and simpler
+way to develop real time sound algorithms off-line. 
+Only C code. A KISS to you from me.
+
+You are only interested in this package if you are interested in
+   * music instrument real-time __pitch tracking__ in general, or
+   * anything that can run on board a __Cleveland Music Hothouse__, or
+   * any other __Daisy Seed__ pedal, or
+   * any other sound real-time __DSP__.
+
 
 # Introduction
 
 This is an advanced guitar pitch tracker, plus a small synth. The whole idea
-is to develop a one file C-code guitar monophonic pitch tracker suitable for 
-use in DSP real-time hardware. One of the main ideas is to be
-able to develop it off-line, reading a WAV file and producing a WAV file. Then
-compile it and upload it to Hothouse Daisy Seed without any hazzle. 
+is to develop a C-code guitar monophonic pitch tracker suitable for 
+use in DSP real-time hardware. One of the main ideas is to 
+develop it off-line, reading a WAV file and producing a WAV file. 
+Then - and only then -
+compile it and upload it to Hothouse Daisy Seed without any hazzle.
+This will also make it totally self sufficient for anyone wanting to put it
+on other hardware.
 
-The design choice here is to develop it inside HothouseExamples source tree.
-But this does _not_ mean that you have to have any hardware at all, you can just
-enjoy developing algorithms of-line.
+The design choice here is to develop it like it resides in the
+HothouseExamples source tree.
+But actually, you don't have to download _any_ other sorce code. This repo is
+totally self sufficient until you actually want to put the code on a DSP. 
+You can just enjoy developing off-line without any dependencies.
+
+To repeat: if you have the Cleveland Music Hothouse source code then put this at the 
+expected place. If you don't, then download and enjoy anyway. Did I mention that 
+it has _no_ dependencies?
 
    * The __src__ library contains the source code in the `molysynth.cpp` file
-     as usual for someone that comes from Daisy Seed development.
+     as usual for someone that comes from Daisy Seed development. Yes, I checked
+     in .vscode too.
    * The __dev__ library contains code for working off-line with WAV files.
      It also contains a Jupyter Notebook containing Julia code. 
-     It serves as a starting point if
-     you want to analyze WAV that go into or out of Molysynth. Copy the
+     That serves as a starting point if you are litterate in Julia and want 
+     to analyze WAV data that goes into or comes out of Molysynth. Copy the
      file before using it because you do _not_ want to check in a ton of data, so
-     do _not_ track your own file with git. 
+     do _not_ track your own notebook with git as I did. 
+     A Jupyter Notebook may contain
+     _tons_ of irrelevant data after running it. If you use Python then maybe
+     that notebook can simply be an inspiration or maybe you have your way of looking
+     at WAV files.
    * The __dat__ library contains a WAV file to get you started. I use Garage Band
-     to record my own WAV file to ecperiment with. 
-
-Note that the Daisy Seed specific code is actually ifdeffed away so that porting
-this to another environment should be a breeze. Note also that I hate C++ so I kept 
-that part only in the Daisy Seed dependent part.
+     to record my own WAV files to experiment with. 
 
 Anyway, just download this to your machine and go into __dev__ and do ´make test´
 and listen and enjoy. 
@@ -41,13 +61,14 @@ The goal is to track a lot better than the competition, ie
  * __Electro-Harmonix mono__
  * __Keeley synth 1__
 
-Note that __Mooer E7__ is _not_ a synth despite the name, not in the meaning 
-used here,
-since it does not use a real pitch tracker, probably only FFT frequency analyzer.
- 
-I have yet to analyze __Boss SY-1__ to find out what is actually going on inside it.
-
 Also, harmonizers, like __Mooer Harmony X2__ use a pitch tracker.
+
+Note that __Mooer E7__ is _not_ a synth despite the name, not in the meaning 
+used here.
+It does not synthesize the sound - yes it adds synthesized ambient sound and
+stuff but the acual base frequencies when playing chords come from the guitar. 
+
+I have yet to analyze __Boss SY-1__ to find out what is actually going on inside it.
 
 One difficulty is that in a true monophonic tracker it is difficult to 
 figure out a tone if the last tone is still sounding on another string on the guitar, 
@@ -61,14 +82,14 @@ At some point I may add FFT to play with polyphonic output too, but that is for 
 
 | CONTROL | DESCRIPTION | NOTES |
 |-|-|-|
-| KNOB 1 | DryWet mix |  |
-| KNOB 2 | Sensivity |  |
-| KNOB 3 | Attack |  |
-| KNOB 4 | Decay |  |
+| KNOB 1 | Sensitivity |  |
+| KNOB 2 | Guitar volume |  |
+| KNOB 3 | Synth volume |  |
+| KNOB 4 | Attack/Decay |  (Need more knobs...) |
 | KNOB 5 | Sustain |  |
 | KNOB 6 | Release |  |
-| SWITCH 1 | Wave form | **SQUARE** - <br/>**TRIANGLE** - <br/>**SINE** -  |
-| SWITCH 2 | Autotune | **AUTOTUNE** - <br/>**OFF** - <br/>**DRY ATTACK** -  |
-| SWITCH 3 | ADSR mix | **ADSR** - <br/>**ATTACK ONLY** - <br/>**INSTRUMENT** - |
+| SWITCH 1 | Wave form | **SQUARE** - <br/>**SAWTOOTH** - <br/>**TRIANGLE** -  |
+| SWITCH 2 | Autotune | **AUTOTUNE** - <br/>**OFF** - <br/>**DRY ATTACK** - |
+| SWITCH 3 | ADSR mix | **ADSR** - <br/>**ATTACK+INSTRUMENT** - <br/>**INSTRUMENT** - |
 | FOOTSWITCH 1 | Unused |  |
 | FOOTSWITCH 2 | Bypass | Molysynth |
