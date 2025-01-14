@@ -17,6 +17,12 @@
 // ### Uncomment if IntelliSense can't resolve DaisySP-LGPL classes ###
 // #include "daisysp-lgpl.h"
 
+// ======================================= Yes, we drag in the C file here! ===
+extern "C" {
+#include "src/molysynth.c"
+}
+// ============================================================================
+
 #include "daisysp.h"
 #include "hothouse.h"
 
@@ -44,6 +50,9 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out,
       out[0][i] = out[1][i] = in[0][i];
     } else {
       // TODO: replace silence with something awesome
+
+// THIS IS JUST TO SEE IF IT COMPILES
+      moly_callback((const int16_t *)in, (int16_t *)out, size);
       out[0][i] = out[1][i] = 0.0f;
     }
   }
@@ -68,6 +77,9 @@ int main() {
 
     // Call System::ResetToBootloader() if FOOTSWITCH_1 is pressed for 2 seconds
     hw.CheckResetToBootloader();
+
+    // Main workload
+    moly_analyze();
   }
   return 0;
 }

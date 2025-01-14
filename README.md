@@ -26,7 +26,7 @@ on other hardware.
 
 The design choice here is to develop it like it resides in the
 HothouseExamples source tree.
-But actually, you don't have to download _any_ other sorce code. This repo is
+But actually, you don't have to download _any_ other source code. This repo is
 totally self sufficient until you actually want to put the code on a DSP. 
 You can just enjoy developing off-line without any dependencies.
 
@@ -34,23 +34,25 @@ To repeat: if you have the Cleveland Music Hothouse source code then put this at
 expected place. If you don't, then download and enjoy anyway. Did I mention that 
 it has _no_ dependencies?
 
-   * The __src__ library contains the source code in the `molysynth.cpp` file
-     as usual for someone that comes from Daisy Seed development. Yes, I checked
-     in .vscode too.
+   * In the top level library we have the file `molysynth.cpp` as usual. But
+     this is just a thin wrapper and for off-line development this is not
+     needed. For off-line development we use the libraries __src__, __dev__ 
+     and __dat__.
+   * The __src__ library contains the real source code in `molysynth.c` with
+     no dependencies at all on Daisy Seed.
    * The __dev__ library contains code for working off-line with WAV files.
      It also contains a Jupyter Notebook containing Julia code. 
      That serves as a starting point if you are litterate in Julia and want 
      to analyze WAV data that goes into or comes out of Molysynth. Copy the
      file before using it because you do _not_ want to check in a ton of data, so
      do _not_ track your own notebook with git as I did. 
-     A Jupyter Notebook may contain
-     _tons_ of irrelevant data after running it. If you use Python then maybe
-     that notebook can simply be an inspiration or maybe you have your way of looking
-     at WAV files.
+     If you use Python then maybe
+     that notebook can simply be an inspiration or maybe you have your own way 
+     of looking at WAV files.
    * The __dat__ library contains a WAV file to get you started. I use Garage Band
      to record my own WAV files to experiment with. 
 
-Anyway, just download this to your machine and go into __dev__ and do ´make test´
+Anyway, just download this to your machine and go into __dev__ and do `make test`
 and listen and enjoy. 
 
 
@@ -82,9 +84,9 @@ At some point I may add FFT to play with polyphonic output too, but that is for 
 
 | CONTROL | DESCRIPTION | NOTES |
 |-|-|-|
-| KNOB 1 | Sensitivity |  |
-| KNOB 2 | Guitar volume |  |
-| KNOB 3 | Synth volume |  |
+| KNOB 1 | Dry volume |  |
+| KNOB 2 | Wet volume |  |
+| KNOB 3 | Sensitivity |  |
 | KNOB 4 | Attack/Decay |  (Need more knobs...) |
 | KNOB 5 | Sustain |  |
 | KNOB 6 | Release |  |
