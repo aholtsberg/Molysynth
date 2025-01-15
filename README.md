@@ -2,9 +2,11 @@
 
 Contributed by Anders Holtsberg \<<anders.holtsberg@gmail.com>\>
 
-An open-source electric molyphonic guitar pitch tracker. A better and simpler
+Molysynth is an open-source electric molyphonic guitar pitch tracker. 
+It also demonstrades a better and simpler
 way to develop real time sound algorithms off-line. 
-Only C code. A KISS to you from me.
+C code is the only programming lanuage used. 
+KISS to you from me.
 
 You are only interested in this package if you are interested in
    * music instrument real-time __pitch tracking__ in general, or
@@ -87,11 +89,11 @@ At some point I may add FFT to play with polyphonic output too, but that is for 
 | KNOB 1 | Dry volume |  |
 | KNOB 2 | Wet volume |  |
 | KNOB 3 | Sensitivity |  |
-| KNOB 4 | Attack/Decay/Release |  (Need more knobs...) |
+| KNOB 4 | Attack/Decay |  (Need more knobs...) |
 | KNOB 5 | Sustain |  |
 | KNOB 6 | Release |  |
 | SWITCH 1 | Wave form | **SQUARE** - <br/>**SAWTOOTH** - <br/>**TRIANGLE** -  |
 | SWITCH 2 | Autotune | **AUTOTUNE** - <br/>**OFF** - <br/>**SLIDE** - |
-| SWITCH 3 | Envelope | **ADSR** - <br/>**AR+INSTRUMENT** - <br/>**INSTRUMENT** - |
+| SWITCH 3 | Envelope | **ADSR** - <br/>**INSTRUMENT** - <br/>**AR+INSTRUMENT** - |
 | FOOTSWITCH 1 | Octave same | Octave down |
 | FOOTSWITCH 2 | Bypass | Molysynth |

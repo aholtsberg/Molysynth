@@ -35,7 +35,7 @@
 int moly_init(uint32_t sampleFrequency);
 
 // The sound is arrives with higher priority, hard time constraints.
-void moly_callback(const int16_t *in, int16_t *out, size_t bsz);
+void moly_callback(const float *in, float *out, size_t bsz);
 
 // The main workload of analyzing is done, well, every now and then.
 void moly_analyze(void);

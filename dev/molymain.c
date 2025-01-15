@@ -213,15 +213,18 @@ int main(int argc, char *argv[]) {
    moly_set('v', opt_v);
 
    int acount = 0;
-   int16_t inbuf[BSZ];
-   int16_t outbuf[BSZ];
+   float inbuf[BSZ];
+   float outbuf[BSZ];
    while (o->p <= o->p_end - BSZ * 2) {
       for (int i = 0; i < BSZ; i++) {
-         inbuf[i] = *o->p++;
+         inbuf[i] = (float)*o->p++;
          o->p++; // Skip other channel
       }
       moly_callback(inbuf, outbuf, BSZ);
-      fwrite(outbuf, sizeof(int16_t), BSZ, f);
+      for (int i = 0; i < BSZ; i++) {
+         int16_t x = (int16_t)outbuf[i];
+         fwrite(&x, sizeof(int16_t), 1, f);
+      }
 
       // To simulate a real DSP system where the callback runs in high prioriy
       // we run the main analyze function every 10th time which is about 100 
