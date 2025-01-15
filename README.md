@@ -13,7 +13,7 @@ You are only interested in this package if you are interested in
    * any other sound real-time __DSP__.
 
 
-# Introduction
+## Introduction
 
 This is an advanced guitar pitch tracker, plus a small synth. The whole idea
 is to develop a C-code guitar monophonic pitch tracker suitable for 
@@ -45,7 +45,7 @@ it has _no_ dependencies?
      That serves as a starting point if you are litterate in Julia and want 
      to analyze WAV data that goes into or comes out of Molysynth. Copy the
      file before using it because you do _not_ want to check in a ton of data, so
-     do _not_ track your own notebook with git as I did. 
+     do _not_ track your own notebook with git.
      If you use Python then maybe
      that notebook can simply be an inspiration or maybe you have your own way 
      of looking at WAV files.
@@ -56,7 +56,7 @@ Anyway, just download this to your machine and go into __dev__ and do `make test
 and listen and enjoy. 
 
 
-# Background
+## Background
 
 The goal is to track a lot better than the competition, ie 
 
@@ -80,18 +80,18 @@ Anyway, you can use this code as a framework for trying out your own ideas.
 At some point I may add FFT to play with polyphonic output too, but that is for later.
 
 
-### Hothouse controls
+## Hothouse controls
 
 | CONTROL | DESCRIPTION | NOTES |
 |-|-|-|
 | KNOB 1 | Dry volume |  |
 | KNOB 2 | Wet volume |  |
 | KNOB 3 | Sensitivity |  |
-| KNOB 4 | Attack/Decay |  (Need more knobs...) |
+| KNOB 4 | Attack/Decay/Release |  (Need more knobs...) |
 | KNOB 5 | Sustain |  |
 | KNOB 6 | Release |  |
 | SWITCH 1 | Wave form | **SQUARE** - <br/>**SAWTOOTH** - <br/>**TRIANGLE** -  |
-| SWITCH 2 | Autotune | **AUTOTUNE** - <br/>**OFF** - <br/>**DRY ATTACK** - |
-| SWITCH 3 | ADSR mix | **ADSR** - <br/>**ATTACK+INSTRUMENT** - <br/>**INSTRUMENT** - |
-| FOOTSWITCH 1 | Unused |  |
+| SWITCH 2 | Autotune | **AUTOTUNE** - <br/>**OFF** - <br/>**SLIDE** - |
+| SWITCH 3 | Envelope | **ADSR** - <br/>**AR+INSTRUMENT** - <br/>**INSTRUMENT** - |
+| FOOTSWITCH 1 | Octave same | Octave down |
 | FOOTSWITCH 2 | Bypass | Molysynth |
