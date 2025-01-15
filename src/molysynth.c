@@ -67,7 +67,7 @@ inline static float lpfilter(float x) {
 
 static inline void ringbuffer_write(const float *in, size_t size) {
    // Decimate 4 times, 48 kHz becomes 12 kHz. Saves time in analyze. 
-   for (int i = 0; i < size;) {
+   for (size_t i = 0; i < size;) {
       lpfilter((float)in[i++]);
       lpfilter((float)in[i++]);
       lpfilter((float)in[i++]);
@@ -90,7 +90,7 @@ static inline void synthesizer(float *out, size_t size) {
 
    // Silence
    if (g.synth.lambda == 0.0) {
-      for (int i = 0; i < size; i++) {
+      for (size_t i = 0; i < size; i++) {
          out[i] = 0;
       }
       g.synth.lambda = 0.0;
@@ -105,7 +105,7 @@ static inline void synthesizer(float *out, size_t size) {
    if (g.settings.volsens) {
       vol = g.message.volume;
    }
-   for (int i = 0; i < size; i++) {
+   for (size_t i = 0; i < size; i++) {
        float phi = g.synth.phi + phidelta;
        float x;
        if (phi < 0.5) {
