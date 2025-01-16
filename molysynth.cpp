@@ -64,7 +64,7 @@ void AudioCallback(
 
 int main() {
   hw.Init();
-  hw.SetAudioBlockSize(48);  // Number of samples handled per callback
+  hw.SetAudioBlockSize(48);
   hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
 
   led_bypass.Init(hw.seed.GetPin(Hothouse::LED_2), false);

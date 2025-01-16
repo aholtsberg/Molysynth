@@ -1,5 +1,5 @@
 moly: molymain.c ../src/molysynth.c
-	cc -Wall -I../src $^ -o $@
+	cc -Wall -DOFFLINE -I../src $^ -o $@
 
 clean:
 	rm -f moly *~ tmp.wav
