@@ -16,11 +16,7 @@
 #define LAMBDA_NOCLUE -1
 #define LAMBDA_MIN 30
 #define LAMBDA_MAX 550
-
-
-// The main ringbuffer is more than a second second long
-#define RING_SIZE (1<<16)
-#define RING_MASK (RING_SIZE - 1)
+#define RING_MASK ((1<<16) - 1)
 
 
 struct {
@@ -56,8 +52,8 @@ struct {
 
    // Ringbuffer
    struct {
-      float buf[RING_SIZE];
-      uint32_t i;
+      float buf[(1<<16)];
+      uint16_t i; // Note: this can index the ringbuffer without MASK!
    } ring;
 
 } g;
@@ -67,18 +63,27 @@ struct {
 
 
 struct {
-   int i;
-   int i_previous;
+
+   // For ringbuffer
+   uint16_t i;
+   uint16_t i_previous;
+
+   // For remembering extreme points between calls
    int xi;
    float xv;
+
+   // Temporaries
    float thismax;
    int lambda_raw;
    float lambda_acf;
+
+   // The latest zero crossings
    struct zevent {
-      int i; // zerocrossing index
-      int xi; // extreme value index
+      uint16_t i; // zerocrossing index in ringbuffer
+      uint16_t xi; // extreme value index in ringbuffer
       float xv; // extreme value
    } z[ZSIZE];
+
 } t;
 
 
@@ -96,7 +101,6 @@ inline static float lpfilter(float x) {
 static inline void ringbuffer_write(const float *in, size_t size) {
    for (size_t i = 0; i < size; i++) {
       g.ring.buf[g.ring.i++] = lpfilter(in[i]);
-      g.ring.i &= RING_MASK;
    }
 }
 
@@ -180,9 +184,10 @@ static void t_update(void) {
 
    // Find new zero crossings (and compute thismax on the fly)
    t.thismax = 0.0;
-   float x0 = g.ring.buf[(t.i_previous - 1) & RING_MASK];
-   float x1;
-   for (int i = t.i_previous; i != t.i; x0 = x1, i = (i + 1) & RING_MASK) {
+   float x0;
+   float x1 = g.ring.buf[t.i_previous - 1];
+   for (uint16_t i = t.i_previous; i != t.i; i++) {
+      x0 = x1;
       x1 = g.ring.buf[i];
       if (x0 >= 0.0) {
          if (x1 < 0.0) {
@@ -323,22 +328,6 @@ static void t_lambda_raw(void) {
 }
 
 
-static bool t_checksilence(void) {
-   if (t.thismax < g.settings.trigger_level / 2 || 
-      (t.lambda_raw == LAMBDA_SILENCE && t.thismax < g.settings.trigger_level)) {
-      zevents_wipeout();
-      t.lambda_raw = LAMBDA_SILENCE;
-      t.lambda_acf = LAMBDA_SILENCE;
-      g.message.lambda = LAMBDA_SILENCE;
-      g.message.volume = 0.0;
-      g.message.state = 1;
-      P("S\n");
-      return true;
-   }
-   return false;
-}
-
-
 //================================================================ EXPORTED ===
 
 
@@ -356,8 +345,23 @@ void moly_callback(const float *in, float *out, size_t size) {
 
 void moly_analyze(void) {
    t_update();
-   if (t_checksilence()) return;
+
+   // Silence?
+   if (t.thismax < g.settings.trigger_level / 2 || 
+      (t.lambda_raw == LAMBDA_SILENCE && t.thismax < g.settings.trigger_level)) {
+      zevents_wipeout();
+      t.lambda_raw = LAMBDA_SILENCE;
+      t.lambda_acf = 0.0;
+      g.message.lambda = 0.0;
+      g.message.volume = 0.0;
+      g.message.state = 1;
+      P("S\n");
+      return;
+   }
+
    t_lambda_raw();
+   if (t.lambda_raw <= 0) return; // No message!
+
    if (t.lambda_raw > 0) {
       g.message.lambda = (float) t.lambda_raw;
       g.message.volume = 5000.0;
