@@ -1,3 +1,4 @@
+#include <math.h>
 #include "molysynth.h"
 
 #ifdef OFFLINE
@@ -54,6 +55,7 @@ struct {
    struct {
       float buf[(1<<16)];
       uint16_t i; // Note: this can index the ringbuffer without MASK!
+      size_t time;
    } ring;
 
 } g;
@@ -67,6 +69,7 @@ struct {
    // For ringbuffer
    uint16_t i;
    uint16_t i_previous;
+   size_t time;
 
    // For remembering extreme points between calls
    int xi;
@@ -76,6 +79,10 @@ struct {
    float thismax;
    int lambda_raw;
    float lambda_acf;
+   float volume;
+   float lambda_fit;
+   float acf_m2;
+   int acf_len;
 
    // The latest zero crossings
    struct zevent {
@@ -102,6 +109,7 @@ static inline void ringbuffer_write(const float *in, size_t size) {
    for (size_t i = 0; i < size; i++) {
       g.ring.buf[g.ring.i++] = lpfilter(in[i]);
    }
+   g.ring.time += size;
 }
 
 
@@ -181,8 +189,9 @@ static void t_update(void) {
    // We note that g.ring.i can change under our feet so we copy it once.
    t.i_previous = t.i;
    t.i = g.ring.i;
+   t.time = g.ring.time; // Only for debug, no need for semaphore
 
-   // Find new zero crossings (and compute thismax on the fly)
+   // Find new zero crossings (and compute thismax on the fly).
    t.thismax = 0.0;
    float x0;
    float x1 = g.ring.buf[t.i_previous - 1];
@@ -319,13 +328,126 @@ static void t_lambda_raw(void) {
    t_lambda_raw_oneside(0, xv + 0, lambda[0]);
    t_lambda_raw_oneside(1, xv + 1, lambda[1]);
 
-   P("L %3d %3d %3d  %3d %3d %3d ", 
+   P("%zu %3d %3d %3d  %3d %3d %3d ", t.time,
    lambda[0][0], lambda[0][1], lambda[0][2],
    lambda[1][0], lambda[1][1], lambda[1][2]);
 
    t.lambda_raw = picklambdaraw(median3(lambda[0]), median3(lambda[1]));
-   P("  %3d\n", t.lambda_raw);
+   P("  %3d ", t.lambda_raw);
 }
+
+
+//========================================================= AUTOCORRELATION ===
+
+
+// Instead of maximizing ACF we minimize normalized sum squared diff.
+// That is the same thing.
+static float meandiff2mid(int lambda) {
+   uint16_t k = t.i - lambda; // For ringbuffer
+   float d2first = 0.0;
+   float m2first = 0.0;
+
+   // Initialize m2 with the last cycle
+   float d2 = 0.0;
+   float m2 = 0.0;
+   for (uint16_t i = 0; i < lambda; i++) {
+      float x = g.ring.buf[(uint16_t)(k + i)];
+      m2 += x * x;
+   }
+
+   // Go backwards one cycle at a time
+   int ncycles = 2;
+   for (;; ncycles++) {
+      // Do next cycle
+      float d2t = 0.0;
+      float m2t = 0.0;
+      for (int i = 0; i < lambda; i++) {
+         --k;
+         float x0 = g.ring.buf[k];
+         float x1 = g.ring.buf[(uint16_t)(k + lambda)];
+         float d = x0 - x1;
+         d2t += d * d;
+         m2t += x1 * x1;
+      }
+      // Now, remember the first cycle's value
+      if (ncycles == 2) {
+         d2 = d2first = d2t;
+         m2first = m2; // Not m2t, see above
+         m2 += m2t; // Note that m2 now has energy from two cycles
+      } else {
+         // As long as cycle error has not doubled (OR cycle error grows 
+         // to more than 20 percent of first cycle energy) AND cycle energy
+         // does not shrink below half of first cycle energy THEN we add this
+         // cycle and grab more.
+         if ((d2t < 2 * d2first || d2t < 0.2 * m2first) && 2 * m2t > m2first) {
+            d2 += d2t;
+            m2 += m2t;
+         } else {
+            // If it breaks here the first time, ncycles is 2.
+            break;
+         }
+      }
+      if (ncycles == 32) break;
+   }
+
+   P("%2d~ ", ncycles);
+
+   d2 = d2 / (float) ((ncycles - 1) * lambda);
+   int n = ncycles * lambda;
+   m2 = m2 / (float) n;
+   if (m2 == 0.0) m2 = 1.0; // No div by 0 on next line
+   d2 = d2 / m2;
+   t.volume = sqrt(m2);
+   t.lambda_fit = d2;
+   t.acf_m2 = m2;
+   t.acf_len = n;
+   return d2;
+}
+
+
+// The window size and m2 are already precomputed
+float meandiff2(int lambda) {
+   int n = t.acf_len;
+   float d2 = 0.0;
+   uint16_t i_stop = t.i + n - lambda;
+   for (uint16_t i = t.i - n; i != i_stop; i++) {
+      float x0 = g.ring.buf[i];
+      float x1 = g.ring.buf[(uint16_t)(i + lambda)];
+      float d = x0 - x1;
+      d2 += d * d;
+   }
+   return d2 / (t.acf_m2 * (float)(n - lambda));
+}
+
+
+static void t_lambda_acf() {
+   int lM = t.lambda_raw;
+   int delta = lM / 50;
+   if (delta < 2) delta = 2;
+   int lL = lM - delta;
+   int lR = lM + delta;
+   float dM = meandiff2mid(lM);
+   P("%0.3f ", dM);
+   float dL = meandiff2(lL);
+   float dR = meandiff2(lR);
+   float b = dR - dL;
+   float c = dR - 2.0 * dM + dL;
+   if (c == 0.0) {
+      // TODO 
+      t.lambda_acf = 0.0;
+      t.lambda_fit = 0.0;
+      return;
+   }
+   float lHat = lM - (float)delta * (b / (2.0 * c));
+   if (lHat < lL || lR < lHat) {
+      // TODO
+      // Do not change anything
+      return;
+   }
+   t.lambda_acf = lHat;
+   P("%3.1f ", t.lambda_acf);
+}
+
 
 
 //================================================================ EXPORTED ===
@@ -355,24 +477,27 @@ void moly_analyze(void) {
       g.message.lambda = 0.0;
       g.message.volume = 0.0;
       g.message.state = 1;
-      P("S\n");
+      P("-\n");
       return;
    }
 
    t_lambda_raw();
-   if (t.lambda_raw <= 0) return; // No message!
+   if (t.lambda_raw <= 0) {
+      P("\n");
+      return; // No message!
+   }
+   t_lambda_acf();
 
-   if (t.lambda_raw > 0) {
-      g.message.lambda = (float) t.lambda_raw;
+   if (t.lambda_acf > 0) {
+      g.message.lambda = t.lambda_acf;
       g.message.volume = 5000.0;
       g.message.state = 1;
-   } 
+   }
 /*
-   findlambda_acf();
    autotune()
    trigger()
 */
-
+   P("\n");
 }
 
 
