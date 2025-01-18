@@ -19,6 +19,9 @@ char helptext[] =
 "       The following options are available. The defaults are given both\n"
 "       for no option and for option without argument.\n"
 "\n"
+"       -v  Verbose, print one line per processed pitch estimation.\n"
+"       -t  Autotune.\n"
+
 "       -a  Auto-tune (0..9, default 0/9)\n"
 "       -c  Octave down (0..9 blend, default 0/9)\n"
 "       -e  Envelope: Attack, Decay, Sustain, Release (0..9)\n"
@@ -28,8 +31,6 @@ char helptext[] =
 "       -o  Outfile (default tmp.wav).\n"
 "       -p  Print info about the wav file.\n"
 "       -r  Trigger level (0-9: 1 << (6+x), default 5)\n"
-"       -t  Synth tracker (mono/moly/poly).\n"
-"       -v  Verbose, print one line per processed block.\n"
 "       -w  Waveform (0..3 is none/sine/square/sawtooth).\n"
 "       -y  Velocity sensivity, dynamic (0..9 default 9/0).\n"
 "       -z  Fuzzbox (0..9, default 0/5).\n"
@@ -154,10 +155,10 @@ int main(int argc, char *argv[]) {
    // Options
    int opt_w = 0;
    int opt_z = 0;
-   int opt_a = 0;
    int opt_y = 0;
    int opt_r = 5;
    int opt_v = 0;
+   int opt_t = 0;
    for (int i = 1; i < argc; i++) {
       if (argv[i][0] == '-') {
          if (!strcmp(argv[i], "-h")) {
@@ -169,8 +170,8 @@ int main(int argc, char *argv[]) {
             opt_z = optarg(argv[i][2]);
          } else if (!strncmp(argv[i], "-w", 2)) {
             opt_w = optarg(argv[i][2]);
-         } else if (!strncmp(argv[i], "-a", 2)) {
-            opt_a = optarg(argv[i][2]);
+         } else if (!strncmp(argv[i], "-t", 2)) {
+            opt_t = optarg(argv[i][2]);
          } else if (!strncmp(argv[i], "-y", 2)) {
             opt_y = optarg(argv[i][2]);
          } else if (!strncmp(argv[i], "-r", 2)) {
@@ -193,6 +194,7 @@ int main(int argc, char *argv[]) {
 
    // Open
    struct session *o = newSession(filename, optPrintInfo);
+   moly_init(44100.0);
 
    // Start writing outfile
    FILE *f = fopen("tmp.wav", "wb");
@@ -207,7 +209,7 @@ int main(int argc, char *argv[]) {
    //TODOstruct msyn *s = msyn_create();
    moly_set('w', opt_w);
    moly_set('z', opt_z);
-   moly_set('a', opt_a);
+   moly_set('t', opt_t);
    moly_set('y', opt_y);
    moly_set('r', opt_r);
    moly_set('v', opt_v);
@@ -217,12 +219,12 @@ int main(int argc, char *argv[]) {
    float outbuf[BSZ];
    while (o->p <= o->p_end - BSZ * 2) {
       for (int i = 0; i < BSZ; i++) {
-         inbuf[i] = (float)*o->p++;
+         inbuf[i] = (float)*o->p++ / 32768.0;
          o->p++; // Skip other channel
       }
       moly_callback(inbuf, outbuf, BSZ);
       for (int i = 0; i < BSZ; i++) {
-         int16_t x = (int16_t)outbuf[i];
+         int16_t x = (int16_t)(outbuf[i] * 32768.0);
          fwrite(&x, sizeof(int16_t), 1, f);
       }
 

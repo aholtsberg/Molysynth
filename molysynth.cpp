@@ -66,6 +66,7 @@ int main() {
   hw.Init();
   hw.SetAudioBlockSize(48);
   hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
+  moly_init(48000);
 
   led_bypass.Init(hw.seed.GetPin(Hothouse::LED_2), false);
 

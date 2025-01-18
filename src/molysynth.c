@@ -1,4 +1,5 @@
 #include <math.h>
+#include <string.h>
 #include "molysynth.h"
 
 #ifdef OFFLINE
@@ -24,11 +25,18 @@ struct {
 
    // Settings
    struct {
+      float sample_frequency;
       int waveform;
       int autotune;
       int volsens;
-      float trigger_level;
+      float triglevel;
+      // Debog of-line
       int verbose;
+      // Synth
+      int attack;
+      int decay;
+      int sustain;
+      int release;
    } settings;
 
    // Synth
@@ -36,6 +44,12 @@ struct {
       float lambda;
       float phi;
       float volume;
+      // ADSR
+      int state; // 0: silent, 1: attack, 2: decay, 3: sustain, 4:release
+      float attack; // delta per sample until volume 0.5
+      float decay; // delta per sample until sustain
+      float sustain; // 0.0 - 0.5
+      float release; // delta per sample until 0.0
    } synth;
 
    // Decimation filter
@@ -83,6 +97,7 @@ struct {
    float lambda_fit;
    float acf_m2;
    int acf_len;
+   char autotune_name[4];
 
    // The latest zero crossings
    struct zevent {
@@ -136,7 +151,7 @@ static inline void synthesizer(float *out, size_t size) {
 
    // Run
    float phidelta = 1.0 / g.synth.lambda;
-   float vol = 5000.0;
+   float vol = 0.5;
    if (g.settings.volsens) {
       vol = g.message.volume;
    }
@@ -155,6 +170,54 @@ static inline void synthesizer(float *out, size_t size) {
        }
        out[i] = x;
        g.synth.phi = phi;
+   }
+}
+
+
+//=============================================================  AUTOTUNE =====
+
+
+// These valuses are for 44.1 kHz
+const float standard_lambda[] = {
+535.149432, 505.113803, 476.763943, 450.005239, 424.748386, 400.909091, 
+378.407793, 357.169395, 337.123017, 318.201756, 300.342464, 283.485537, 
+267.574716, 252.556901, 238.381972, 225.002620, 212.374193, 200.454545, 
+189.203896, 178.584698, 168.561509, 159.100878, 150.171232, 141.742768, 
+133.787358, 126.278451, 119.190986, 112.501310, 106.187097, 100.227273, 
+ 94.601948,  89.292349,  84.280754,  79.550439,  75.085616,  70.871384, 
+ 66.893679,  63.139225,  59.595493,  56.250655,  53.093548,  50.113636, 
+ 47.300974,  44.646174,  42.140377,  39.775220,  37.542808,  35.435692, 
+ 33.446840,   0.0
+};
+
+
+// These names will be used of-line only
+const char standard_name[] =
+            " E; F;#F; G;#G; A;bB; B;"
+" C,#C, D,#D, E, F,#F, G,#G, A,bB, B," 
+" C #C  D #D  E  F #F  G #G  A bB  B " 
+" c #c  d #d  e  f #f  g #g  a bb  b " 
+" c'#c' d'#d' e'";
+
+
+float autotune(float x) {
+   if (x == 0.0) return 0.0;
+   for (int i = 1; 1; i++) {
+      float x0 = standard_lambda[i - 1];
+      float x1 = standard_lambda[i];
+      if (x1 == 0.0) {
+         goto return_x0;
+      }
+      if (x >= x1) {
+         if (x0 - x < x - x1) {
+            return_x0:
+            strncpy(t.autotune_name, standard_name + 3 * (i - 1), 3);
+            return x0;
+         } else {
+            strncpy(t.autotune_name, standard_name + 3 * i, 3);
+            return x1;
+         }
+      }
    }
 }
 
@@ -219,7 +282,7 @@ static void t_update(void) {
       if (x1 > t.thismax) t.thismax = x1;
       if (-x1 > t.thismax) t.thismax = -x1;
    }
-   
+
 }
 
 
@@ -328,12 +391,12 @@ static void t_lambda_raw(void) {
    t_lambda_raw_oneside(0, xv + 0, lambda[0]);
    t_lambda_raw_oneside(1, xv + 1, lambda[1]);
 
-   P("%zu %3d %3d %3d  %3d %3d %3d ", t.time,
+   P("%3d %3d %3d  %3d %3d %3d ",
    lambda[0][0], lambda[0][1], lambda[0][2],
    lambda[1][0], lambda[1][1], lambda[1][2]);
 
    t.lambda_raw = picklambdaraw(median3(lambda[0]), median3(lambda[1]));
-   P("  %3d ", t.lambda_raw);
+   P(" %3d  ", t.lambda_raw);
 }
 
 
@@ -387,10 +450,8 @@ static float meandiff2mid(int lambda) {
             break;
          }
       }
-      if (ncycles == 32) break;
+      if (ncycles == 16) break;
    }
-
-   P("%2d~ ", ncycles);
 
    d2 = d2 / (float) ((ncycles - 1) * lambda);
    int n = ncycles * lambda;
@@ -401,6 +462,7 @@ static float meandiff2mid(int lambda) {
    t.lambda_fit = d2;
    t.acf_m2 = m2;
    t.acf_len = n;
+   P("%2d %.3f ", ncycles, t.volume);
    return d2;
 }
 
@@ -427,7 +489,7 @@ static void t_lambda_acf() {
    int lL = lM - delta;
    int lR = lM + delta;
    float dM = meandiff2mid(lM);
-   P("%0.3f ", dM);
+   P("%1.3f ", dM);
    float dL = meandiff2(lL);
    float dR = meandiff2(lR);
    float b = dR - dL;
@@ -440,12 +502,11 @@ static void t_lambda_acf() {
    }
    float lHat = lM - (float)delta * (b / (2.0 * c));
    if (lHat < lL || lR < lHat) {
-      // TODO
-      // Do not change anything
-      return;
+      lHat = 0.0;
    }
    t.lambda_acf = lHat;
-   P("%3.1f ", t.lambda_acf);
+   P("%5.1f ", t.lambda_acf);
+   return;
 }
 
 
@@ -454,12 +515,17 @@ static void t_lambda_acf() {
 
 
 int moly_init(uint32_t sampleFrequency) {
-   g.settings.trigger_level = 1000.0;
+   g.settings.sample_frequency = sampleFrequency;
+   g.settings.triglevel = 0.08;
+   if (sampleFrequency != 44100) {
+      // TODO autotune
+   }
    return 0;
 }
 
 
 void moly_callback(const float *in, float *out, size_t size) {
+   if (g.settings.sample_frequency == 0.0) return;
    synthesizer(out, size);
    ringbuffer_write(in, size);
 }
@@ -467,45 +533,62 @@ void moly_callback(const float *in, float *out, size_t size) {
 
 void moly_analyze(void) {
    t_update();
+   P("%zu %.2f  ",  t.time, t.thismax);
 
    // Silence?
-   if (t.thismax < g.settings.trigger_level / 2 || 
-      (t.lambda_raw == LAMBDA_SILENCE && t.thismax < g.settings.trigger_level)) {
+   if (t.thismax < g.settings.triglevel / 2 || 
+      (t.lambda_raw == LAMBDA_SILENCE && t.thismax < g.settings.triglevel)) {
       zevents_wipeout();
       t.lambda_raw = LAMBDA_SILENCE;
       t.lambda_acf = 0.0;
       g.message.lambda = 0.0;
       g.message.volume = 0.0;
       g.message.state = 1;
-      P("-\n");
+      P("\n");
       return;
    }
 
+   // Lambda
    t_lambda_raw();
    if (t.lambda_raw <= 0) {
       P("\n");
       return; // No message!
    }
    t_lambda_acf();
-
-   if (t.lambda_acf > 0) {
-      g.message.lambda = t.lambda_acf;
-      g.message.volume = 5000.0;
-      g.message.state = 1;
+   if (t.lambda_acf == 0.0) {
+      P("\n");
+      return;
    }
+
+   // Autotune and trigger
+   if (g.settings.autotune) {
+      t.lambda_acf = autotune(t.lambda_acf);
+      P("%5.1f %s ", t.lambda_acf, t.autotune_name);
+   }
+
 /*
-   autotune()
    trigger()
 */
    P("\n");
+
+   if (t.lambda_acf > 0) {
+      g.message.lambda = t.lambda_acf;
+      g.message.volume = 1.0;
+      g.message.state = 1;
+   }
 }
 
 
 void moly_set(char opt, int val) {
+   if (opt == MOLY_ATTACK) g.settings.attack = val;   // 0-999
+   if (opt == MOLY_DECAY) g.settings.decay = val;     // 0-999
+   if (opt == MOLY_SUSTAIN) g.settings.sustain = val; // 0-999
+   if (opt == MOLY_RELEASE) g.settings.release = val; // 0-999
+
    if (opt == 'w') g.settings.waveform = val;
-   if (opt == 'a') g.settings.autotune = val;
+   if (opt == 't') g.settings.autotune = val;
    if (opt == 'y') g.settings.volsens = val;
    if (opt == 'v') g.settings.verbose = val;
-   if (opt == 'r') g.settings.trigger_level = 1 << (6 + val);
+   //if (opt == 'r') g.settings.triglevel = 1 << (6 + val);
 }
 
