@@ -7,36 +7,29 @@
 #include "molysynth.h"
 
 char helptext[] =
-"**************** TO BE FIXED *******\n"
 "NAME\n"
 "       moly - guitar synth processing\n\n"
 "SYNOPSIS\n"
 "       moly [options] wavfile\n\n"
 "DESCRIPTION\n"
-"       This is a command line tool for experimenting with guitar synth\n"
-"       algorithms.\n"
-"\n"
-"       The following options are available. The defaults are given both\n"
-"       for no option and for option without argument.\n"
+"       This is a command line tool for experimenting with pitch tracking.\n"
 "\n"
 "       -v  Verbose, print one line per processed pitch estimation.\n"
-"       -t  Autotune.\n"
-
-"       -a  Auto-tune (0..9, default 0/9)\n"
-"       -c  Octave down (0..9 blend, default 0/9)\n"
-"       -e  Envelope: Attack, Decay, Sustain, Release (0..9)\n"
-"       -g  Output gain (0..9, default 3/6).\n"
-"       -h  Print this helptext.\n"
-"       -m  Passthrough mix (0..9 blend, default 0/4).\n"
-"       -o  Outfile (default tmp.wav).\n"
-"       -p  Print info about the wav file.\n"
-"       -r  Trigger level (0-9: 1 << (6+x), default 5)\n"
-"       -w  Waveform (0..3 is none/sine/square/sawtooth).\n"
-"       -y  Velocity sensivity, dynamic (0..9 default 9/0).\n"
-"       -z  Fuzzbox (0..9, default 0/5).\n"
-"       -Z  Tube screamer (0..9, default 0/5).\n"
+"       -t  Autotune\n"
+"\n"
+"       The following arguments each take a floating point argument (defaults\n"
+"       in parenthesis)."
+"\n"
+"       -y  Dryvolume (0.0)\n"
+"       -w  Wetvolume (1.0)\n"
+"       -i  Sensivity (0.08)\n"
+"       -a  Attack (0.1)\n"
+"       -d  Decay (0.1)\n"
+"       -s  Sustain (0.3)\n"
+"       -r  Release (0.2)\n"
+"       -w  Waveform (0: square)\n"
+"       -x  Envelmix (0: ADSR, 1: instrument, 2: A+instrument+D)\n"
 "\n";
-
 
 struct format {
    uint16_t audioFormat;
@@ -142,9 +135,27 @@ struct session *newSession(char *filename, int optPrintInfo) {
 }
 
 
-int optarg(char c) {
-   assert('0' <= c && c <= '9');
-   return c - '0';
+float optarg(char *c) {
+   assert(('0' <= *c && *c <= '9') || *c == '.');
+   float x = 0.0;
+   int k = 1;
+   for (;; c++) {
+      if (*c == '.') {
+         assert(k == 1);
+         k = 10 * k;
+      } else if ('0' <= *c && *c <= '9') {
+         int d = (*c - '0');
+         if (k == 1) {
+            x = 10 * x + (float)d;
+         } else {
+            x += d / (float)k;
+            k = 10 * k;
+         }
+      } else {
+         printf(">>> %f\n", x);
+         return x;
+      }
+   }
 }
 
 
@@ -152,33 +163,27 @@ int main(int argc, char *argv[]) {
    char *filename = 0;
    int optPrintInfo = 0;
 
+   moly_init(44100.0);
+
    // Options
-   int opt_w = 0;
-   int opt_z = 0;
-   int opt_y = 0;
-   int opt_r = 5;
-   int opt_v = 0;
-   int opt_t = 0;
    for (int i = 1; i < argc; i++) {
       if (argv[i][0] == '-') {
          if (!strcmp(argv[i], "-h")) {
             printf("%s", helptext);
             exit(0);
+         } else if (!strcmp(argv[i], "-v")) {
+            moly_set('v', 1.0);
          } else if (!strcmp(argv[i], "-p")) {
             optPrintInfo = 1;
-         } else if (!strncmp(argv[i], "-z", 2)) {
-            opt_z = optarg(argv[i][2]);
-         } else if (!strncmp(argv[i], "-w", 2)) {
-            opt_w = optarg(argv[i][2]);
-         } else if (!strncmp(argv[i], "-t", 2)) {
-            opt_t = optarg(argv[i][2]);
-         } else if (!strncmp(argv[i], "-y", 2)) {
-            opt_y = optarg(argv[i][2]);
-         } else if (!strncmp(argv[i], "-r", 2)) {
-            opt_r = optarg(argv[i][2]);
-         } else if (!strcmp(argv[i], "-v")) {
-            opt_v = 1;
+         } else if (argv[i][0] == '-') {
+            int c = argv[i][1];
+            if (index("yeiadsrtx", c)) {
+               moly_set(c, optarg(&argv[i][2]));
+            } else {
+               goto bail;
+            }
          } else {
+            bail:
             printf("There is no option %s\n", argv[i]);
             exit(1);
          }
@@ -194,7 +199,6 @@ int main(int argc, char *argv[]) {
 
    // Open
    struct session *o = newSession(filename, optPrintInfo);
-   moly_init(44100.0);
 
    // Start writing outfile
    FILE *f = fopen("tmp.wav", "wb");
@@ -206,14 +210,6 @@ int main(int argc, char *argv[]) {
    size_t d = ftell(f);
 
    // Process and make a linked list of everything
-   //TODOstruct msyn *s = msyn_create();
-   moly_set('w', opt_w);
-   moly_set('z', opt_z);
-   moly_set('t', opt_t);
-   moly_set('y', opt_y);
-   moly_set('r', opt_r);
-   moly_set('v', opt_v);
-
    int acount = 0;
    float inbuf[BSZ];
    float outbuf[BSZ];
@@ -224,8 +220,11 @@ int main(int argc, char *argv[]) {
       }
       moly_callback(inbuf, outbuf, BSZ);
       for (int i = 0; i < BSZ; i++) {
-         int16_t x = (int16_t)(outbuf[i] * 32768.0);
-         fwrite(&x, sizeof(int16_t), 1, f);
+         float x = outbuf[i] * 32768.0;
+         if (x < -32767.0) x = -32767.0;
+         if (x > 32768.0) x = 32768.0;
+         int16_t y = (int16_t)(outbuf[i] * 32768.0);
+         fwrite(&y, sizeof(int16_t), 1, f);
       }
 
       // To simulate a real DSP system where the callback runs in high prioriy

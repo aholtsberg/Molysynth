@@ -32,8 +32,6 @@ using daisy::Led;
 using daisy::SaiHandle;
 
 Hothouse hw;
-
-// Bypass vars
 Led led_bypass;
 bool bypass = true;
 
@@ -43,9 +41,6 @@ void AudioCallback(
   AudioHandle::OutputBuffer out,
   size_t size)
 {
-  hw.ProcessAllControls();
-  bypass ^= hw.switches[Hothouse::FOOTSWITCH_2].RisingEdge();
-
   // Bypass
   if (bypass) {
     for (size_t i = 0; i < size; i++) {
@@ -63,19 +58,35 @@ void AudioCallback(
 
 
 int main() {
+  int k;
+
+  // Init
   hw.Init();
   hw.SetAudioBlockSize(48);
   hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
   moly_init(48000);
 
-  led_bypass.Init(hw.seed.GetPin(Hothouse::LED_2), false);
-
+  // Callback
   hw.StartAdc();
   hw.StartAudio(AudioCallback);
 
   while (true) {
     hw.DelayMs(10);
 
+    // Knobs and switches
+    hw.ProcessAllControls();
+    bypass ^= hw.switches[Hothouse::FOOTSWITCH_2].RisingEdge();
+    moly_set(MOLY_SENSITIV, 0.2 * (hw.knobs[0].Process() - 1.0));
+    moly_set(MOLY_DRYVOLUME, 2.0 * hw.knobs[1].Process());
+    moly_set(MOLY_WETVOLUME, 2.0 * hw.knobs[2].Process());
+    moly_set(MOLY_ATTACK, hw.knobs[3].Process());
+    moly_set(MOLY_DECAY, hw.knobs[3].Process());
+    moly_set(MOLY_SUSTAIN, hw.knobs[4].Process());
+    moly_set(MOLY_RELEASE, hw.knobs[5].Process());
+    k = hw.GetToggleswitchPosition(Hothouse::TOGGLESWITCH_2);
+    moly_set(MOLY_AUTOTUNE, (float)k);
+    k = hw.GetToggleswitchPosition(Hothouse::TOGGLESWITCH_3);
+    moly_set(MOLY_ENVELMIX, (float)k);
     // Toggle effect bypass LED when footswitch is pressed
     led_bypass.Set(bypass ? 0.0f : 1.0f);
     led_bypass.Update();

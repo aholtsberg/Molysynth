@@ -28,8 +28,9 @@
 #define MOLY_SUSTAIN     's' // 0-999
 #define MOLY_RELEASE     'r' // 0-999
 #define MOLY_WAVEFORM    'w' // 0-2 (square, sawtooth, triangle)
-#define MOLY_AUTOTUNE    't' // 0-2 (AUTO/OFF/DRYATTACK)
-#define MOLY_ADSRMIX     'x' // 0-2 (ADSR/ATTACK+INSTRUMENT/INSTRUMENT)
+#define MOLY_AUTOTUNE    't' // 0-1 (OFF/AUTO)
+#define MOLY_ENVELMIX    'x' // 0-2 (ADSR/ATTACK+INSTRUMENT/INSTRUMENT)
+#define MOLY_VERBOSE     'v' // off-line only
 
 // The sample frequency is not hardcoded. This means that our code can 
 // run from WAV files (44100 Hz) as well as DSP (48 kHz, 32 kHz, ...)
@@ -42,6 +43,6 @@ void moly_callback(const float *in, float *out, size_t bsz);
 void moly_analyze(void);
 
 // Any time we can change the settings
-void moly_set(char opt, int val);
+void moly_set(char opt, float val);
 
 #endif

@@ -26,17 +26,18 @@ struct {
    // Settings
    struct {
       float sample_frequency;
-      int waveform;
-      int autotune;
-      int volsens;
+      float dryvolume;
+      float wetvolume;
       float triglevel;
-      // Debog of-line
+      int envelmix;
+      int autotune;
+      // Debug off-line
       int verbose;
       // Synth
-      int attack;
-      int decay;
-      int sustain;
-      int release;
+      float attack;
+      float decay;
+      float sustain;
+      float release;
    } settings;
 
    // Synth
@@ -150,26 +151,42 @@ static inline void synthesizer(float *out, size_t size) {
    }
 
    // Run
+   // (*) The interesting part is the volume. Either it is taken from
+   // the message, in case the wetvolume 1.0 should be like the guitar.
+   // Or it is taken from ADSR, in case we use something that will make
+   // it as loud as the guitar for wetvolume 1.0.
    float phidelta = 1.0 / g.synth.lambda;
-   float vol = 0.5;
-   if (g.settings.volsens) {
-      vol = g.message.volume;
+   float v = 0.3; // <--(*)
+   if (g.settings.envelmix != 0) {
+      v = g.message.volume;
    }
+   v = v * g.settings.wetvolume;
+
    for (size_t i = 0; i < size; i++) {
        float phi = g.synth.phi + phidelta;
-       float x;
+       float x = 1.0;
        if (phi < 0.5) {
-          x = vol;
+          // do nothing
        } else if (phi >= 1.0) {
-          x = vol * ((phi - 1.0) - (1.0 - g.synth.phi)) / phidelta;
+          x = x * ((phi - 1.0) - (1.0 - g.synth.phi)) / phidelta;
           phi -= 1.0;
        } else if (g.synth.phi < 0.5) {
-          x = vol * ((0.5 - g.synth.phi) - (phi - 0.5)) / phidelta;
+          x = x * ((0.5 - g.synth.phi) - (phi - 0.5)) / phidelta;
        } else {
-          x = -vol;
+          x = -x;
        }
-       out[i] = x;
+       out[i] = v * x;
        g.synth.phi = phi;
+   }
+
+}
+
+
+static void add_dry(const float *in, float *out, size_t size) {
+   float v = g.settings.dryvolume;
+   if (!v) return;
+   for (size_t i = 0; i < size; i++) {
+      out[i] +=  v * in[i];
    }
 }
 
@@ -329,28 +346,16 @@ int picklambdaraw(int lm0, int lm1) {
    lm1 = checklambda(lm1);
 
    // If one fails, the other may be functioning
-   if (lm0 == LAMBDA_NOCLUE) {
-      return lm1;
-   }
-   if (lm1 == LAMBDA_NOCLUE) {
-      return lm0;
-   }
+   if (lm0 == LAMBDA_NOCLUE) return lm1;
+   if (lm1 == LAMBDA_NOCLUE) return lm0;
 
    // This is what we want
-   if (lambdas_are_close(lm0, lm1)) {
-      return (lm0 + lm1) / 2;
-   }
+   if (lambdas_are_close(lm0, lm1)) return (lm0 + lm1) / 2;
 
    // Check with history otherwise
-   if (t.lambda_raw <= 0) {
-      return LAMBDA_NOCLUE;
-   }
-   if (lambdas_are_close(lm0, t.lambda_raw)) {
-      return  lm0;
-   } 
-   if (lambdas_are_close(lm1, t.lambda_raw)) {
-      return  lm1;
-   } 
+   if (t.lambda_raw <= 0) return LAMBDA_NOCLUE;
+   if (lambdas_are_close(lm0, t.lambda_raw)) return  lm0;
+   if (lambdas_are_close(lm1, t.lambda_raw)) return  lm1;
    return LAMBDA_NOCLUE;
 }
 
@@ -471,7 +476,7 @@ static float meandiff2mid(int lambda) {
 float meandiff2(int lambda) {
    int n = t.acf_len;
    float d2 = 0.0;
-   uint16_t i_stop = t.i + n - lambda;
+   uint16_t i_stop = t.i - lambda;
    for (uint16_t i = t.i - n; i != i_stop; i++) {
       float x0 = g.ring.buf[i];
       float x1 = g.ring.buf[(uint16_t)(i + lambda)];
@@ -492,6 +497,7 @@ static void t_lambda_acf() {
    P("%1.3f ", dM);
    float dL = meandiff2(lL);
    float dR = meandiff2(lR);
+   //P("[(%d)%.5f %.5f %.5f(%d)] ", lL, dL, dM, dR, lR);
    float b = dR - dL;
    float c = dR - 2.0 * dM + dL;
    if (c == 0.0) {
@@ -516,7 +522,16 @@ static void t_lambda_acf() {
 
 int moly_init(uint32_t sampleFrequency) {
    g.settings.sample_frequency = sampleFrequency;
+   g.settings.dryvolume = 0.0;
+   g.settings.wetvolume = 1.0;
    g.settings.triglevel = 0.08;
+   g.settings.attack = 0.1;
+   g.settings.decay = 0.1;
+   g.settings.sustain = 0.3;
+   g.settings.release = 0.2;
+   g.settings.autotune = 0;
+   g.settings.envelmix = 0;
+   g.settings.verbose = 0;
    if (sampleFrequency != 44100) {
       // TODO autotune
    }
@@ -527,6 +542,7 @@ int moly_init(uint32_t sampleFrequency) {
 void moly_callback(const float *in, float *out, size_t size) {
    if (g.settings.sample_frequency == 0.0) return;
    synthesizer(out, size);
+   add_dry(in, out, size);
    ringbuffer_write(in, size);
 }
 
@@ -536,6 +552,7 @@ void moly_analyze(void) {
    P("%zu %.2f  ",  t.time, t.thismax);
 
    // Silence?
+//P("\n>>> %f %f\n", t.thismax,  g.settings.triglevel);
    if (t.thismax < g.settings.triglevel / 2 || 
       (t.lambda_raw == LAMBDA_SILENCE && t.thismax < g.settings.triglevel)) {
       zevents_wipeout();
@@ -571,24 +588,24 @@ void moly_analyze(void) {
 */
    P("\n");
 
-   if (t.lambda_acf > 0) {
+   if (t.lambda_acf > 0.0) {
       g.message.lambda = t.lambda_acf;
-      g.message.volume = 1.0;
+      g.message.volume = t.volume;
       g.message.state = 1;
    }
 }
 
 
-void moly_set(char opt, int val) {
-   if (opt == MOLY_ATTACK) g.settings.attack = val;   // 0-999
-   if (opt == MOLY_DECAY) g.settings.decay = val;     // 0-999
-   if (opt == MOLY_SUSTAIN) g.settings.sustain = val; // 0-999
-   if (opt == MOLY_RELEASE) g.settings.release = val; // 0-999
-
-   if (opt == 'w') g.settings.waveform = val;
-   if (opt == 't') g.settings.autotune = val;
-   if (opt == 'y') g.settings.volsens = val;
-   if (opt == 'v') g.settings.verbose = val;
-   //if (opt == 'r') g.settings.triglevel = 1 << (6 + val);
+void moly_set(char opt, float val) {
+   if (opt == 'y') g.settings.dryvolume = val;
+   if (opt == 'e') g.settings.wetvolume = val;
+   if (opt == 'i') g.settings.triglevel = val;
+   if (opt == 'a') g.settings.attack = val;
+   if (opt == 'd') g.settings.decay = val;
+   if (opt == 's') g.settings.sustain = val;
+   if (opt == 'r') g.settings.release = val;
+   if (opt == 't') g.settings.autotune = (int)val;
+   if (opt == 'x') g.settings.envelmix = (int)val;
+   if (opt == 'v') g.settings.verbose = (int)val;
 }
 
