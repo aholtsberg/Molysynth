@@ -3,7 +3,7 @@
 Contributed by Anders Holtsberg \<<anders.holtsberg@gmail.com>\>
 
 Molysynth is an open-source electric molyphonic guitar pitch tracker. 
-It demonstrates a better and way to develop real time sound algorithms off-line. 
+It demonstrates a simple way to develop real time sound algorithms off-line. 
 The programming language is C. Only C. KISS to you from me.
 
 You are only interested in this package if you are interested in
@@ -79,7 +79,7 @@ figure out a tone if the last tone is still sounding on another string on the gu
 and that problem is the research main point for me. I have not implemented
 or even tested my ideas so far, this is only the framework for being
 able to do it. 
-At point I also may add FFT to play with polyphonic output too, but that is
+I may add FFT to play with polyphonic output too, but that is
 also for later.
 
 Anyway, you can use this code as a framework for trying out your own ideas.
