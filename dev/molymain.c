@@ -152,7 +152,6 @@ float optarg(char *c) {
             k = 10 * k;
          }
       } else {
-         printf(">>> %f\n", x);
          return x;
       }
    }

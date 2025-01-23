@@ -92,6 +92,8 @@ struct {
 
    // Temporaries
    float thismax;
+   float prevmax;
+   float prevvolume;
    int lambda_raw;
    float lambda_acf;
    float volume;
@@ -262,6 +264,30 @@ static void zevents_wipeout(void) {
 
 
 //=========================================================== PITCH TRACKER ===
+
+
+static void send_message(float lambda, float volume) {
+   int state = 1;
+   g.message.lambda = lambda;
+   g.message.volume = volume;
+   if (volume == 0.0) {
+      zevents_wipeout();
+      t.lambda_raw = LAMBDA_SILENCE;
+      t.lambda_acf = 0.0;
+      t.prevmax = 0;
+      t.prevvolume = 0.0;
+   } else if (volume > 0.0 && 
+      2 * t.thismax > 3 * t.prevmax && 
+      9 * volume > 10 * t.prevvolume) {
+      state = 2;
+   }
+   g.message.state = state; // Must be atomic
+   t.prevmax = t.thismax;
+   t.prevvolume = volume;
+   if (state == 2) {
+       P("T ");
+   }
+}
 
 
 static void t_update(void) {
@@ -552,47 +578,29 @@ void moly_analyze(void) {
    P("%zu %.2f  ",  t.time, t.thismax);
 
    // Silence?
-//P("\n>>> %f %f\n", t.thismax,  g.settings.triglevel);
    if (t.thismax < g.settings.triglevel / 2 || 
       (t.lambda_raw == LAMBDA_SILENCE && t.thismax < g.settings.triglevel)) {
-      zevents_wipeout();
-      t.lambda_raw = LAMBDA_SILENCE;
-      t.lambda_acf = 0.0;
-      g.message.lambda = 0.0;
-      g.message.volume = 0.0;
-      g.message.state = 1;
-      P("\n");
-      return;
+      send_message(0.0, 0.0);
+      goto bail;
    }
 
-   // Lambda
+   // Lambda, lambda and autotune
    t_lambda_raw();
-   if (t.lambda_raw <= 0) {
-      P("\n");
-      return; // No message!
-   }
+   if (t.lambda_raw <= 0) goto bail;
    t_lambda_acf();
-   if (t.lambda_acf == 0.0) {
-      P("\n");
-      return;
-   }
-
-   // Autotune and trigger
+   if (t.lambda_acf == 0.0) goto bail;
    if (g.settings.autotune) {
       t.lambda_acf = autotune(t.lambda_acf);
       P("%5.1f %s ", t.lambda_acf, t.autotune_name);
    }
 
-/*
-   trigger()
-*/
-   P("\n");
-
+   // Note: trigger is set in send_message
    if (t.lambda_acf > 0.0) {
-      g.message.lambda = t.lambda_acf;
-      g.message.volume = t.volume;
-      g.message.state = 1;
+      send_message(t.lambda_acf, t.volume);
    }
+
+   bail:
+   P("\n");
 }
 
 
