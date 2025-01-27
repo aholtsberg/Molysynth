@@ -15,20 +15,20 @@ char helptext[] =
 "       This is a command line tool for experimenting with pitch tracking.\n"
 "\n"
 "       -v  Verbose, print one line per processed pitch estimation.\n"
-"       -t  Autotune\n"
 "\n"
-"       The following arguments each take a floating point argument (defaults\n"
-"       in parenthesis)."
+"       All following arguments each take a floating point argument (defaults\n"
+"       in parentheses)."
 "\n"
+"       ### Pitch tracker\n"
+"       -i  Sensivity (0.08)\n"
+"       -c  Compress (0.0)"
+"       -t  Compress attack (0.0)"
+"\n"
+"       ### Synth\n"
 "       -y  Dryvolume (0.0)\n"
 "       -w  Wetvolume (1.0)\n"
-"       -i  Sensivity (0.08)\n"
 "       -a  Attack (0.1)\n"
-"       -d  Decay (0.1)\n"
-"       -s  Sustain (0.3)\n"
 "       -r  Release (0.2)\n"
-"       -w  Waveform (0: square)\n"
-"       -x  Envelmix (0: ADSR, 1: instrument, 2: A+instrument+D)\n"
 "\n";
 
 struct format {
@@ -176,7 +176,7 @@ int main(int argc, char *argv[]) {
             optPrintInfo = 1;
          } else if (argv[i][0] == '-') {
             int c = argv[i][1];
-            if (index("yeiadsrtx", c)) {
+            if (index("yeiadsrx", c)) {
                moly_set(c, optarg(&argv[i][2]));
             } else {
                goto bail;
@@ -221,8 +221,8 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < BSZ; i++) {
          float x = outbuf[i] * 32768.0;
          if (x < -32767.0) x = -32767.0;
-         if (x > 32768.0) x = 32768.0;
-         int16_t y = (int16_t)(outbuf[i] * 32768.0);
+         if (x > 32767.0) x = 32767.0;
+         int16_t y = (int16_t)x;
          fwrite(&y, sizeof(int16_t), 1, f);
       }
 

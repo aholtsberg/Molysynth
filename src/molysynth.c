@@ -259,54 +259,6 @@ static void add_dry(const float *in, float *out, size_t size) {
 }
 
 
-//=============================================================  AUTOTUNE =====
-
-
-// These valuses are for 44.1 kHz
-const float standard_lambda[] = {
-535.149432, 505.113803, 476.763943, 450.005239, 424.748386, 400.909091, 
-378.407793, 357.169395, 337.123017, 318.201756, 300.342464, 283.485537, 
-267.574716, 252.556901, 238.381972, 225.002620, 212.374193, 200.454545, 
-189.203896, 178.584698, 168.561509, 159.100878, 150.171232, 141.742768, 
-133.787358, 126.278451, 119.190986, 112.501310, 106.187097, 100.227273, 
- 94.601948,  89.292349,  84.280754,  79.550439,  75.085616,  70.871384, 
- 66.893679,  63.139225,  59.595493,  56.250655,  53.093548,  50.113636, 
- 47.300974,  44.646174,  42.140377,  39.775220,  37.542808,  35.435692, 
- 33.446840,   0.0
-};
-
-
-// These names will be used of-line only
-const char standard_name[] =
-            " E; F;#F; G;#G; A;bB; B;"
-" C,#C, D,#D, E, F,#F, G,#G, A,bB, B," 
-" C #C  D #D  E  F #F  G #G  A bB  B " 
-" c #c  d #d  e  f #f  g #g  a bb  b " 
-" c'#c' d'#d' e'";
-
-
-float autotune(float x) {
-   if (x == 0.0) return 0.0;
-   for (int i = 1; 1; i++) {
-      float x0 = standard_lambda[i - 1];
-      float x1 = standard_lambda[i];
-      if (x1 == 0.0) {
-         goto return_x0;
-      }
-      if (x >= x1) {
-         if (x0 - x < x - x1) {
-            return_x0:
-            strncpy(t.autotune_name, standard_name + 3 * (i - 1), 3);
-            return x0;
-         } else {
-            strncpy(t.autotune_name, standard_name + 3 * i, 3);
-            return x1;
-         }
-      }
-   }
-}
-
-
 //================================================================= ZEVENTS ===
 
 
@@ -539,7 +491,7 @@ static float meandiff2mid(int lambda) {
          // to more than 20 percent of first cycle energy) AND cycle energy
          // does not shrink below half of first cycle energy THEN we add this
          // cycle and grab more.
-         if ((d2t < 2 * d2first || d2t < 0.2 * m2first) && 2 * m2t > m2first) {
+         if ((d2t < 2 * d2first || d2t < 0.1 * m2first) && 2 * m2t > m2first) {
             d2 += d2t;
             m2 += m2t;
          } else {
@@ -615,18 +567,14 @@ static void t_lambda_acf() {
 int moly_init(uint32_t sampleFrequency) {
    g.settings.sample_frequency = sampleFrequency;
    g.settings.dryvolume = 0.0;
-   g.settings.wetvolume = 1.0;
+   g.settings.wetvolume = 0.5;
    g.settings.triglevel = 0.08;
-   g.settings.autotune = 0;
    g.settings.envelmix = 0;
    g.settings.verbose = 0;
    g.synth.attack = 0.02;
    g.synth.decay = 0.02;
    g.synth.sustain = 0.3;
    g.synth.release = 0.02;
-   if (sampleFrequency != 44100) {
-      // TODO autotune
-   }
    return 0;
 }
 
@@ -650,17 +598,14 @@ void moly_analyze(void) {
       goto bail;
    }
 
-   // Lambda, lambda and autotune
+   // Lambda and lambda
    t_lambda_raw();
    if (t.lambda_raw <= 0) goto bail;
    t_lambda_acf();
    if (t.lambda_acf == 0.0) goto bail;
-   if (g.settings.autotune) {
-      t.lambda_acf = autotune(t.lambda_acf);
-      P("%5.1f %s ", t.lambda_acf, t.autotune_name);
-   }
 
    // Note: trigger is set in send_message
+   // TODO send message anyway
    if (t.lambda_acf > 0.0) {
       send_message(t.lambda_acf, t.volume);
    }
@@ -674,7 +619,6 @@ void moly_set(char opt, float val) {
    if (opt == 'y') g.settings.dryvolume = val;
    if (opt == 'e') g.settings.wetvolume = val;
    if (opt == 'i') g.settings.triglevel = val;
-   if (opt == 't') g.settings.autotune = (int)val;
    if (opt == 'x') g.settings.envelmix = (int)val;
    if (opt == 'v') g.settings.verbose = (int)val;
    // Synth

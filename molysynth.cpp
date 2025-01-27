@@ -75,12 +75,15 @@ int main() {
 
     // Knobs and switches
     hw.ProcessAllControls();
-    bypass ^= hw.switches[Hothouse::FOOTSWITCH_2].RisingEdge();
-    moly_set(MOLY_SENSITIV, 0.2 * (hw.knobs[0].Process() - 1.0));
+    moly_set(MOLY_SENSITIV, 0.2 * hw.knobs[0].Process());
     moly_set(MOLY_DRYVOLUME, 2.0 * hw.knobs[1].Process());
-    moly_set(MOLY_WETVOLUME, 2.0 * hw.knobs[2].Process());
-    moly_set(MOLY_ATTACK, hw.knobs[3].Process());
-    moly_set(MOLY_DECAY, hw.knobs[3].Process());
+    // Note: wet volume should have same volume as dry volume. It has been set
+    // that that for off-line WAV but for Hothouse it seems like ratio 1/2 is
+    // more fitting.  
+    moly_set(MOLY_WETVOLUME, hw.knobs[2].Process());
+    float ad = hw.knobs[3].Process();
+    moly_set(MOLY_ATTACK, ad);
+    moly_set(MOLY_DECAY, ad);
     moly_set(MOLY_SUSTAIN, hw.knobs[4].Process());
     moly_set(MOLY_RELEASE, hw.knobs[5].Process());
     k = hw.GetToggleswitchPosition(Hothouse::TOGGLESWITCH_2);
@@ -88,6 +91,7 @@ int main() {
     k = hw.GetToggleswitchPosition(Hothouse::TOGGLESWITCH_3);
     moly_set(MOLY_ENVELMIX, (float)k);
     // Toggle effect bypass LED when footswitch is pressed
+    bypass ^= hw.switches[Hothouse::FOOTSWITCH_2].RisingEdge();
     led_bypass.Set(bypass ? 0.0f : 1.0f);
     led_bypass.Update();
 

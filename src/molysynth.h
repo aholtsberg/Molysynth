@@ -20,27 +20,57 @@
 
 \*****************************************************************************/
 
-#define MOLY_DRYVOLUME   'y' // 0-999
-#define MOLY_WETVOLUME   'e' // 0-999
-#define MOLY_SENSITIV    'i' // 0-999
-#define MOLY_ATTACK      'a' // 0-999
-#define MOLY_DECAY       'd' // 0-999
-#define MOLY_SUSTAIN     's' // 0-999
-#define MOLY_RELEASE     'r' // 0-999
-#define MOLY_WAVEFORM    'w' // 0-2 (square, sawtooth, triangle)
-#define MOLY_AUTOTUNE    't' // 0-1 (OFF/AUTO)
-#define MOLY_ENVELMIX    'x' // 0-2 (ADSR/ATTACK+INSTRUMENT/INSTRUMENT)
+// Pitch tracker
+#define MOLY_SENSITIV    'i' // Default 0.08
+#define MOLY_VCOMPRESS   'c' // 0-2 (linear, compress1, compress2)
+
+// Mini synth
+#define MOLY_DRYVOLUME   'y' // Default 1.0
+#define MOLY_WETVOLUME   'e' // Default 1.0
+#define MOLY_ATTACK      'a' // Default 0.01
+#define MOLY_DECAY       'd' // Default 0.05
+#define MOLY_SUSTAIN     's' // Default 0.3
+#define MOLY_RELEASE     'r' // Default 0.01
+#define MOLY_ENVELMIX    'x' // 0-1 (ADSR, instrument)
+
+// For use off-line
 #define MOLY_VERBOSE     'v' // off-line only
 
-// The sample frequency is not hardcoded. This means that our code can 
-// run from WAV files (44100 Hz) as well as DSP (48 kHz, 32 kHz, ...)
-int moly_init(uint32_t sampleFrequency);
+// After analyzing what is going on (I recommend 100 times per second), we
+// receive the result in form of a message. 
+// NOTE 1: The wavelength lambda is guaranteed to be non-zero if the volume
+// is non-zero, ie the tracker itself continues the last tone if it can not 
+// figure out the frequency at the moment.
+// NOTE 2: There is no TRIG_OFF message, silence is only marked with volume 0.0,
+// and TRIG can arrive without silence in between.
+// NOTE 3: The receiver (the synth) may write type 0 in order to remember that 
+// the message is already read.
+// NOTE 4: The whole hoopla here is for making it very easy for you to replace 
+// the synth with your synth, or harmonizer or adaptive filter or whatever.
+// NOTE 5: The volume can be compressed with an option. 
+#define MOLY_MTYPE_CONTINUE 1 // No trig.
+#define MOLY_MTYPE_TRIG 2 // Trig means a new tone starts.
+struct moly_message {
+   int type;
+   float lambda; // Wavelength in number of samples.
+   float volume; // This is the compressed volume
+   float volume_raw; // This is the original volume
+};
 
-// The sound is arrives with higher priority, hard time constraints.
+// REMOVE
 void moly_callback(const float *in, float *out, size_t bsz);
-
-// The main workload of analyzing is done, well, every now and then.
 void moly_analyze(void);
+
+// The sample frequency is not hardcoded. This means that our code can 
+// run from WAV files (44.1 kHz) as well as DSP (48 kHz, 32 kHz). A hardcoded
+// filter expects it to be somewhere in that range.
+int moly_init(uint32_t sampleFrequency);
+void moly_addtobuf(const float *in, size_t bsz);
+struct moly_message *moly_analyzer(void);
+
+// The mini synth
+void moly_synth(const float *in, float *out, size_t bsz);
+void moly_synth_message(struct moly_message *m);
 
 // Any time we can change the settings
 void moly_set(char opt, float val);
