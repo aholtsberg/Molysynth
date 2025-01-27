@@ -213,11 +213,19 @@ int main(int argc, char *argv[]) {
    float inbuf[BSZ];
    float outbuf[BSZ];
    while (o->p <= o->p_end - BSZ * 2) {
+
+      // 1. Read next input buffer
       for (int i = 0; i < BSZ; i++) {
          inbuf[i] = (float)*o->p++ / 32768.0;
          o->p++; // Skip other channel
       }
-      moly_callback(inbuf, outbuf, BSZ);
+
+      // 2. High priority
+      //moly_callback(inbuf, outbuf, BSZ);
+      moly_addtobuf(inbuf, BSZ);
+      moly_synth(inbuf, outbuf, BSZ); // <-- Replace by your own
+
+      // 3. Write the result to file
       for (int i = 0; i < BSZ; i++) {
          float x = outbuf[i] * 32768.0;
          if (x < -32767.0) x = -32767.0;
@@ -226,12 +234,15 @@ int main(int argc, char *argv[]) {
          fwrite(&y, sizeof(int16_t), 1, f);
       }
 
-      // To simulate a real DSP system where the callback runs in high prioriy
+      // 4. Low-priority
+      // To simulate a real DSP system, where the analysis is in low-priority,
       // we run the main analyze function every 10th time which is about 100 
       // times per second.
       if (++acount == 10) {
          acount = 0;
-         moly_analyze();
+         //moly_analyze();
+         struct moly_message *m = moly_analyze();
+         moly_synth_message(m); // <-- Replace by your own
       }
    }
 

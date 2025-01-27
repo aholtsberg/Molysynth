@@ -14,8 +14,6 @@
 
 
 // Note: for all lambda in the chain 0 is silence and -1 is no clue.
-#define LAMBDA_SILENCE 0
-#define LAMBDA_NOCLUE -1
 #define LAMBDA_MIN 30
 #define LAMBDA_MAX 550
 #define MTYPE_NONE 0
@@ -66,11 +64,7 @@ struct {
    } filter;
 
    // Message from tracker
-   struct {
-      int type; // See above
-      float lambda;
-      float volume;
-   } message;
+   struct moly_message message;
 
    // Ringbuffer
    struct {
@@ -100,6 +94,7 @@ struct {
    float thismax;
    float prevmax;
    float prevvolume;
+   float prevlambda;
    int lambda_raw;
    float lambda_acf;
    float volume;
@@ -129,7 +124,8 @@ inline static float lpfilter(float x) {
 }
 
 
-static inline void ringbuffer_write(const float *in, size_t size) {
+// Exported directly
+void moly_addtobuf(const float *in, size_t size) {
    for (size_t i = 0; i < size; i++) {
       g.ring.buf[g.ring.i++] = lpfilter(in[i]);
    }
@@ -284,24 +280,33 @@ static void zevents_wipeout(void) {
 //=========================================================== PITCH TRACKER ===
 
 
-static void send_message(float lambda, float volume) {
+static void set_message(float lambda, float volume) {
+   // Problem?
+   if (lambda == 0.0 && volume > 0.0) {
+      if (t.prevvolume > 0.0) {
+         lambda = t.prevlambda;
+      } else {
+         volume = 0.0;
+      }
+   }
+
+   // Write new message
    int mtype = MTYPE_NEW;
    g.message.lambda = lambda;
    g.message.volume = volume;
    if (volume == 0.0) {
       zevents_wipeout();
-      t.lambda_raw = LAMBDA_SILENCE;
+      t.lambda_raw = 0;
       t.lambda_acf = 0.0;
-      t.prevmax = 0;
-      t.prevvolume = 0.0;
-   } else if (volume > 0.0 && 
-      2 * t.thismax > 3 * t.prevmax && 
-      9 * volume > 10 * t.prevvolume) {
+   } else if (volume > 0.0 && (t.prevvolume == 0.0 ||
+      (2 * t.thismax > 3 * t.prevmax && 9 * volume > 10 * t.prevvolume))) {
       mtype = MTYPE_TRIG;
    }
-   g.message.type = mtype; // Must be atomic
+   g.message.type = mtype; // Message is atomic. This is written last.
    t.prevmax = t.thismax;
    t.prevvolume = volume;
+   t.prevlambda = lambda;
+   P("%3.1f %5.3f ", lambda, volume);
    if (mtype == MTYPE_TRIG) {
        P("T ");
    }
@@ -358,7 +363,7 @@ static bool peakisfeasable(int i, float limit) {
 
 // Note: checklambda returns -1 for 0. That is correct.
 int checklambda(int lambda) {
-   if (lambda < LAMBDA_MIN || lambda > LAMBDA_MAX) return LAMBDA_NOCLUE;
+   if (lambda < LAMBDA_MIN || lambda > LAMBDA_MAX) return 0;
    return lambda;
 }
 
@@ -390,17 +395,17 @@ int picklambdaraw(int lm0, int lm1) {
    lm1 = checklambda(lm1);
 
    // If one fails, the other may be functioning
-   if (lm0 == LAMBDA_NOCLUE) return lm1;
-   if (lm1 == LAMBDA_NOCLUE) return lm0;
+   if (lm0 == 0) return lm1;
+   if (lm1 == 0) return lm0;
 
    // This is what we want
    if (lambdas_are_close(lm0, lm1)) return (lm0 + lm1) / 2;
 
    // Check with history otherwise
-   if (t.lambda_raw <= 0) return LAMBDA_NOCLUE;
+   if (t.lambda_raw == 0) return 0;
    if (lambdas_are_close(lm0, t.lambda_raw)) return  lm0;
    if (lambdas_are_close(lm1, t.lambda_raw)) return  lm1;
-   return LAMBDA_NOCLUE;
+   return 0;
 }
 
 
@@ -424,7 +429,9 @@ static void t_lambda_raw_oneside(int i_start, float *xv, int lambda[3]) {
    }
    if (k == 2) {
       // Beware: an earlier zevent is stored in higher index
-      lambda[0] = (t.z[j[0] + 1].i - t.z[j[1] + 1].i) & RING_MASK; // crossing 1
+      if (t.z[j[1] + 1].xv != 0.0) {
+         lambda[0] = (t.z[j[0] + 1].i - t.z[j[1] + 1].i) & RING_MASK; // crossing 1
+      }
       lambda[1] = (t.z[j[0]].xi - t.z[j[1]].xi) & RING_MASK; // extreme value
       lambda[2] = (t.z[j[0]].i - t.z[j[1]].i) & RING_MASK; // crossing 2
       *xv = (t.z[j[0]].xv + t.z[j[1]].xv) / 2;
@@ -532,6 +539,11 @@ float meandiff2(int lambda) {
 
 
 static void t_lambda_acf() {
+   if (t.lambda_raw == 0.0) {
+      t.lambda_acf = 0.0;
+      goto bail;
+   }
+
    int lM = t.lambda_raw;
    int delta = lM / 50;
    if (delta < 2) delta = 2;
@@ -555,6 +567,8 @@ static void t_lambda_acf() {
       lHat = 0.0;
    }
    t.lambda_acf = lHat;
+
+   bail:
    P("%5.1f ", t.lambda_acf);
    return;
 }
@@ -579,39 +593,38 @@ int moly_init(uint32_t sampleFrequency) {
 }
 
 
-void moly_callback(const float *in, float *out, size_t size) {
+void moly_synth(const float *in, float *out, size_t size) {
    if (g.settings.sample_frequency == 0.0) return;
    synthesizer(out, size);
    add_dry(in, out, size);
-   ringbuffer_write(in, size);
 }
 
 
-void moly_analyze(void) {
+void moly_synth_message(struct moly_message *m) {
+   // Do nothing. The synth knows where the message resides :-).
+}
+
+
+struct moly_message* moly_analyze(void) {
    t_update();
    P("%zu %.2f  ",  t.time, t.thismax);
 
    // Silence?
    if (t.thismax < g.settings.triglevel / 2 || 
-      (t.lambda_raw == LAMBDA_SILENCE && t.thismax < g.settings.triglevel)) {
-      send_message(0.0, 0.0);
+      (t.prevlambda == 0.0 && t.thismax < g.settings.triglevel)) {
+      set_message(0.0, 0.0);
       goto bail;
    }
 
-   // Lambda and lambda
+   // Lambda and lambda. NOTE: We must create message, so set_message will
+   // take care of when things go wrong and lambda is 0.0.
    t_lambda_raw();
-   if (t.lambda_raw <= 0) goto bail;
    t_lambda_acf();
-   if (t.lambda_acf == 0.0) goto bail;
-
-   // Note: trigger is set in send_message
-   // TODO send message anyway
-   if (t.lambda_acf > 0.0) {
-      send_message(t.lambda_acf, t.volume);
-   }
+   set_message(t.lambda_acf, t.volume);
 
    bail:
    P("\n");
+   return &g.message;
 }
 
 

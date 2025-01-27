@@ -47,26 +47,23 @@
 // the message is already read.
 // NOTE 4: The whole hoopla here is for making it very easy for you to replace 
 // the synth with your synth, or harmonizer or adaptive filter or whatever.
-// NOTE 5: The volume can be compressed with an option. 
-#define MOLY_MTYPE_CONTINUE 1 // No trig.
-#define MOLY_MTYPE_TRIG 2 // Trig means a new tone starts.
+// NOTE 5: The volume can be compressed with options. The raw volume is also
+// in the message just in case someone wants besides the compressed volume.
+#define MOLY_MTYPE_CONTINUE 1 // No trig
+#define MOLY_MTYPE_TRIG 2 // Trig means a new tone starts
 struct moly_message {
    int type;
-   float lambda; // Wavelength in number of samples.
+   float lambda; // Wavelength in number of samples
    float volume; // This is the compressed volume
    float volume_raw; // This is the original volume
 };
-
-// REMOVE
-void moly_callback(const float *in, float *out, size_t bsz);
-void moly_analyze(void);
 
 // The sample frequency is not hardcoded. This means that our code can 
 // run from WAV files (44.1 kHz) as well as DSP (48 kHz, 32 kHz). A hardcoded
 // filter expects it to be somewhere in that range.
 int moly_init(uint32_t sampleFrequency);
 void moly_addtobuf(const float *in, size_t bsz);
-struct moly_message *moly_analyzer(void);
+struct moly_message *moly_analyze(void);
 
 // The mini synth
 void moly_synth(const float *in, float *out, size_t bsz);
