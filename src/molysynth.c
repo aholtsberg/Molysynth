@@ -13,7 +13,6 @@
 //================================================================= GLOBALS ===
 
 
-// Note: for all lambda in the chain 0 is silence and -1 is no clue.
 #define LAMBDA_MIN 30
 #define LAMBDA_MAX 550
 #define MTYPE_NONE 0
@@ -37,7 +36,7 @@ struct {
       float wetvolume;
       float triglevel;
       int envelmix;
-      int autotune;
+      int compress;
       // Debug off-line
       int verbose;
    } settings;
@@ -277,6 +276,23 @@ static void zevents_wipeout(void) {
 }
 
 
+//========================================================= COMPRESS VOLUME ===
+
+
+static inline float compress_volume(float volume) {
+   float t = g.settings.triglevel;
+   if (g.settings.compress == 1) {
+      if (volume < t) return 2 * volume;
+      return 1.5 * t + 0.5 * volume;
+   }
+   if (g.settings.compress == 2) {
+      if (volume < t) return 3 * volume;
+      return 3 * t;
+   }
+   return volume;
+}
+
+
 //=========================================================== PITCH TRACKER ===
 
 
@@ -293,7 +309,7 @@ static void set_message(float lambda, float volume) {
    // Write new message
    int mtype = MTYPE_NEW;
    g.message.lambda = lambda;
-   g.message.volume = volume;
+   g.message.volume = compress_volume(volume);
    if (volume == 0.0) {
       zevents_wipeout();
       t.lambda_raw = 0;
@@ -306,7 +322,7 @@ static void set_message(float lambda, float volume) {
    t.prevmax = t.thismax;
    t.prevvolume = volume;
    t.prevlambda = lambda;
-   P("%3.1f %5.3f ", lambda, volume);
+   P("%3.1f %5.3f ", g.message.lambda, g.message.volume);
    if (mtype == MTYPE_TRIG) {
        P("T ");
    }
@@ -362,13 +378,13 @@ static bool peakisfeasable(int i, float limit) {
 
 
 // Note: checklambda returns -1 for 0. That is correct.
-int checklambda(int lambda) {
+static int checklambda(int lambda) {
    if (lambda < LAMBDA_MIN || lambda > LAMBDA_MAX) return 0;
    return lambda;
 }
 
 
-int median3(int *p) {
+static int median3(int *p) {
    if (p[0] < p[1]) {
       if (p[2] > p[1]) return p[1];
       if (p[2] > p[0]) return p[2];
@@ -382,7 +398,7 @@ int median3(int *p) {
 }
 
 
-bool lambdas_are_close(int lambda1, int lambda2) {
+static bool lambdas_are_close(int lambda1, int lambda2) {
    int halfnote = lambda2 >> 4;
    if (lambda1 > lambda2 + halfnote) return false;
    if (lambda2 > lambda1 + halfnote) return false;
@@ -390,7 +406,7 @@ bool lambdas_are_close(int lambda1, int lambda2) {
 }
 
 
-int picklambdaraw(int lm0, int lm1) {
+static int picklambdaraw(int lm0, int lm1) {
    lm0 = checklambda(lm0);
    lm1 = checklambda(lm1);
 
@@ -524,7 +540,7 @@ static float meandiff2mid(int lambda) {
 
 
 // The window size and m2 are already precomputed
-float meandiff2(int lambda) {
+static float meandiff2(int lambda) {
    int n = t.acf_len;
    float d2 = 0.0;
    uint16_t i_stop = t.i - lambda;
@@ -632,6 +648,7 @@ void moly_set(char opt, float val) {
    if (opt == 'y') g.settings.dryvolume = val;
    if (opt == 'e') g.settings.wetvolume = val;
    if (opt == 'i') g.settings.triglevel = val;
+   if (opt == 'c') g.settings.compress = (int)val;
    if (opt == 'x') g.settings.envelmix = (int)val;
    if (opt == 'v') g.settings.verbose = (int)val;
    // Synth

@@ -22,7 +22,7 @@
 
 // Pitch tracker
 #define MOLY_SENSITIV    'i' // Default 0.08
-#define MOLY_VCOMPRESS   'c' // 0-2 (linear, compress1, compress2)
+#define MOLY_VCOMPRESS   'c' // 0: linear, 1:compress1, 2: compress2
 
 // Mini synth
 #define MOLY_DRYVOLUME   'y' // Default 1.0

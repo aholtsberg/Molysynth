@@ -22,7 +22,6 @@ char helptext[] =
 "       ### Pitch tracker\n"
 "       -i  Sensivity (0.08)\n"
 "       -c  Compress (0.0)"
-"       -t  Compress attack (0.0)"
 "\n"
 "       ### Synth\n"
 "       -y  Dryvolume (0.0)\n"
@@ -176,7 +175,7 @@ int main(int argc, char *argv[]) {
             optPrintInfo = 1;
          } else if (argv[i][0] == '-') {
             int c = argv[i][1];
-            if (index("yeiadsrx", c)) {
+            if (index("cyeiadsrx", c)) {
                moly_set(c, optarg(&argv[i][2]));
             } else {
                goto bail;
