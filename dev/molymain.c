@@ -20,14 +20,12 @@ char helptext[] =
 "       in parentheses)."
 "\n"
 "       ### Pitch tracker\n"
-"       -i  Sensivity (0.08)\n"
+"       -t  Trig level (0.08)\n"
 "       -c  Compress (0.0)"
 "\n"
 "       ### Synth\n"
-"       -y  Dryvolume (0.0)\n"
+"       -d  Dryvolume (0.0)\n"
 "       -w  Wetvolume (1.0)\n"
-"       -a  Attack (0.1)\n"
-"       -r  Release (0.2)\n"
 "\n";
 
 struct format {
@@ -55,6 +53,9 @@ struct session {
 
 
 #define BSZ 48
+
+
+// ------------------------------------------------------------- READ WAV -----
 
 
 void *fmmap(const char *filename, size_t *size) {
@@ -122,6 +123,38 @@ void wavInit(struct session *o, uint8_t *m, int optPrintInfo) {
 }
 
 
+// ------------------------------------------------------------ WRITE WAV -----
+
+
+FILE* wavout;
+size_t wavout_here;
+
+void wavout_start(void) {
+   wavout = fopen("tmp.wav", "wb");
+   assert(wavout);
+   fprintf(wavout, "RIFF....WAVE");
+   fwrite("fmt \x10\0\0\0\x01\0\x01\0\x44\xAC\0\0\x88\x58\x01\0\x02\0\x10\0", 
+      24, 1, wavout);
+   fprintf(wavout, "data....");
+   wavout_here = ftell(wavout);
+}
+
+
+void wavout_end(void) {
+   uint32_t filesize = (uint32_t)ftell(wavout);
+   uint32_t datasize = (uint32_t)(ftell(wavout) - wavout_here);
+   fseek(wavout, wavout_here - 4, SEEK_SET);
+   fwrite(&datasize, 4, 1, wavout);
+   fseek(wavout, 4, SEEK_SET);
+   filesize -= 8;
+   fwrite(&filesize, 4, 1, wavout);
+   fclose(wavout);
+}
+
+
+// -------------------------------------------------------------- SESSION -----
+
+
 struct session *newSession(char *filename, int optPrintInfo) {
    size_t n;
    assert(filename);
@@ -175,7 +208,7 @@ int main(int argc, char *argv[]) {
             optPrintInfo = 1;
          } else if (argv[i][0] == '-') {
             int c = argv[i][1];
-            if (index("cyeiadsrx", c)) {
+            if (index("tcdw", c)) {
                moly_set(c, optarg(&argv[i][2]));
             } else {
                goto bail;
@@ -197,15 +230,7 @@ int main(int argc, char *argv[]) {
 
    // Open
    struct session *o = newSession(filename, optPrintInfo);
-
-   // Start writing outfile
-   FILE *f = fopen("tmp.wav", "wb");
-   assert(f);
-   fprintf(f, "RIFF....WAVE");
-   fwrite("fmt \x10\0\0\0\x01\0\x01\0\x44\xAC\0\0\x88\x58\x01\0\x02\0\x10\0", 
-      24, 1, f);
-   fprintf(f, "data....");
-   size_t d = ftell(f);
+   wavout_start();
 
    // Process and make a linked list of everything
    int acount = 0;
@@ -222,7 +247,7 @@ int main(int argc, char *argv[]) {
       // 2. High priority
       //moly_callback(inbuf, outbuf, BSZ);
       moly_addtobuf(inbuf, BSZ);
-      moly_synth(inbuf, outbuf, BSZ); // <-- Replace by your own
+      moly_synth(inbuf, outbuf, BSZ); // <-- Replace by your own synth
 
       // 3. Write the result to file
       for (int i = 0; i < BSZ; i++) {
@@ -230,7 +255,7 @@ int main(int argc, char *argv[]) {
          if (x < -32767.0) x = -32767.0;
          if (x > 32767.0) x = 32767.0;
          int16_t y = (int16_t)x;
-         fwrite(&y, sizeof(int16_t), 1, f);
+         fwrite(&y, sizeof(int16_t), 1, wavout);
       }
 
       // 4. Low-priority
@@ -241,17 +266,9 @@ int main(int argc, char *argv[]) {
          acount = 0;
          //moly_analyze();
          struct moly_message *m = moly_analyze();
-         moly_synth_message(m); // <-- Replace by your own
+         moly_synth_message(m); // <-- Replace by your own synth
       }
    }
 
-   // Write 2 datasizes, then done
-   uint32_t filesize = (uint32_t)ftell(f);
-   uint32_t datasize = (uint32_t)(ftell(f) - d);
-   fseek(f, d - 4, SEEK_SET);
-   fwrite(&datasize, 4, 1, f);
-   fseek(f, 4, SEEK_SET);
-   filesize -= 8;
-   fwrite(&filesize, 4, 1, f);
-   fclose(f);
+   wavout_end();
 }

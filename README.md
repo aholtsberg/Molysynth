@@ -46,8 +46,7 @@ it has _no_ dependencies?
      It also contains a Jupyter Notebook containing Julia code. 
      That serves as a starting point if you are litterate in Julia and want 
      to analyze WAV data that goes into or comes out of Molysynth. Copy the
-     file before using it because you do _not_ want to check in a ton of data, so
-     do _not_ track your own notebook with git.
+     file before using it because you do _not_ want to check in a ton of data.
      If you use Python then maybe
      that notebook can simply be an inspiration or maybe you have your own way 
      of looking at WAV files.
@@ -74,29 +73,39 @@ stuff but the acual base frequencies when playing chords come from the guitar.
 
 I have yet to analyze __Boss SY-1__ to find out what is actually going on inside it.
 
-One difficulty is that in a true monophonic tracker it is difficult to 
-figure out a tone if the last tone is still sounding on another string on the guitar, 
-and that problem is the research main point for me. I have not implemented
-or even tested my ideas so far, this is only the framework for being
-able to do it. 
-I may add FFT to play with polyphonic output too, but that is
-also for later.
-
 Anyway, you can use this code as a framework for trying out your own ideas.
+
+
+## Future work
+
+Some future work remains in the tracker. Autotune is not mentioned since I tried it
+and it makes no sense to have it, simply because it feels no good to play with it. 
+
+  * Add FFT and make it experiment with polyphonic tracking.
+  * Better tracking when the previous tone is still sounding.
+
+Here are some ideas you can try out.
+
+  * Connect this to your favourite synth in the Daisy Seed source tree. What 
+    will that sound and feel like?
+  * Suppose you drive this with a nice sounding guitar with overdrive and
+    effects. What are the background sound effects you can generate driven by the
+    by this tracker?
+  * What if you vary a linear filter cutoff frequency with the output of the tracker?
 
 
 ## Hothouse controls
 
 | CONTROL | DESCRIPTION | NOTES |
 |-|-|-|
-| KNOB 1 | Trig level   |  |
-| KNOB 2 | Dry volume   |  |
-| KNOB 3 | Wet volume   |  |
-| KNOB 4 | Attack       |  |
-| KNOB 5 | Release      |  |
-| KNOB 6 | Unused       |  |
-| SWITCH 3 | LP Filter       | off - on |
-| SWITCH 1 | Dry Compression | off - some - max |
-| SWITCH 2 | Wet Compression | off - some - max |
-| FOOTSWITCH 1 | Unused |  |
-| FOOTSWITCH 2 | Bypass |  |
+| KNOB 1 | Trigger level       |  |
+| KNOB 2 | Dry volume          |  |
+| KNOB 3 | Wet volume          |  |
+| KNOB 4 | Compression level   |  |
+| KNOB 5 | Unused              |  |
+| KNOB 6 | Unused              |  |
+| SWITCH 3 | Unused            |  |
+| SWITCH 1 | Unused            |  |
+| SWITCH 2 | Unused            |  |
+| FOOTSWITCH 1 | Unused        |  |
+| FOOTSWITCH 2 | Bypass        |  |

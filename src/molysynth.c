@@ -18,15 +18,11 @@
 #define MTYPE_NONE 0
 #define MTYPE_NEW 1
 #define MTYPE_TRIG 2
-#define VOLSTATE_SILENCE 0
-#define VOLSTATE_ATTACK 1
-#define VOLSTATE_DECAY 2
-#define VOLSTATE_SUSTAIN 3
-#define VOLSTATE_RELEASE 4
-#define VOLSTATE_INSTRUMENT 5
 #define RING_MASK ((1<<16) - 1)
+#define SILENCE_LEVEL (0.25 * g.settings.triglevel)
 
 
+// Various globals
 struct {
 
    // Settings
@@ -35,9 +31,7 @@ struct {
       float dryvolume;
       float wetvolume;
       float triglevel;
-      int envelmix;
-      int compress;
-      // Debug off-line
+      float complevel;
       int verbose;
    } settings;
 
@@ -49,14 +43,9 @@ struct {
       float vol_delta;
       int vol_count;
       int vol_state;
-      // ADSR
-      float attack; // delta per sample until volume 0.5
-      float decay; // delta per sample until sustain
-      float sustain; // 0.0 - 0.5
-      float release; // delta per sample until 0.0
    } synth;
 
-   // Decimation filter
+   // Low-pass filter
    struct {
       float x1;
       float x2;
@@ -78,6 +67,7 @@ struct {
 #define ZSIZE 32
 
 
+// The tracker
 struct {
 
    // For ringbuffer
@@ -135,71 +125,24 @@ void moly_addtobuf(const float *in, size_t size) {
 //============================================================= SYNTHESIZER ===
 
 
+// We can not change the volume abruptly, that will make Heaviside step funcion
+// noise. Therefore we change it slowly.
 static inline void synth_volume_set(int type, float volume) {
    if (type == MTYPE_TRIG) {
       g.synth.vol = 0.0;
-      if (g.settings.envelmix == 0) {
-         g.synth.vol_state = VOLSTATE_ATTACK;
-         g.synth.vol_count = g.settings.sample_frequency * g.synth.attack;
-         g.synth.vol_delta = g.settings.wetvolume / g.synth.vol_count;
-         P("ATTACK\n");
-      } else {
-         g.synth.vol_state = VOLSTATE_INSTRUMENT;
-      }
    }
-
-   if (g.settings.envelmix == 0) {
-      // *** Envelope from ADSR
-      if (volume == 0.0 && g.synth.vol_state != VOLSTATE_RELEASE) {
-         g.synth.vol_state = VOLSTATE_RELEASE;
-         g.synth.vol_count = g.settings.sample_frequency * g.synth.release;
-         g.synth.vol_delta = -g.synth.vol / g.synth.vol_count;
-         P("RELEASE\n");
-      }
-   } else {
-      // *** Envelope from instrument
-      // Let us schedule volume target like 1ms in the future.
-      // That seems to sound good.
-      g.synth.vol_count = 48;
-      g.synth.vol_delta = (volume - g.settings.wetvolume * g.synth.vol) / 48;
-   }
+   g.synth.vol_count = 1 * 48; // 1 ms in the future
+   g.synth.vol_delta = (g.settings.wetvolume * volume - g.synth.vol) / g.synth.vol_count;
 }
 
 
 static inline float synth_volume_next(void) {
-   if (g.synth.vol_state == VOLSTATE_SUSTAIN) {
+   if (g.synth.vol_count >= 0) {
+      g.synth.vol_count--;
+      return g.synth.vol += g.synth.vol_delta;
+   } else {
       return g.synth.vol;
    }
-   if (--g.synth.vol_count < 0) {
-      // Action required
-      if (g.settings.envelmix != 0) {
-         // Instrument
-         g.synth.vol_delta = 0.0;
-      } else {
-         // ADSR
-         if (g.synth.vol_state == VOLSTATE_ATTACK) {
-            g.synth.vol_state = VOLSTATE_DECAY;
-            g.synth.vol_count = g.settings.sample_frequency * g.synth.decay;
-            g.synth.vol_delta = (g.settings.wetvolume * g.synth.sustain -
-               g.synth.vol) / g.synth.vol_count;
-            P("DECAY\n");
-         } else if (g.synth.vol_state == VOLSTATE_DECAY) {
-            g.synth.vol_state = VOLSTATE_SUSTAIN;
-            g.synth.vol_count = 0;
-            g.synth.vol_delta = 0.0;
-            P("SUSTAIN\n");
-         } else if (g.synth.vol_state == VOLSTATE_RELEASE) {
-            g.synth.vol_state = VOLSTATE_SILENCE;
-            g.synth.vol = 0.0;
-            g.synth.vol_count = 0;
-            g.synth.vol_delta = 0.0;
-            g.synth.lambda = 0.0;
-            P("SILENCE\n");
-         }
-      }
-   }
-   g.synth.vol += g.synth.vol_delta;
-   return g.synth.vol;
 }
 
 
@@ -280,16 +223,9 @@ static void zevents_wipeout(void) {
 
 
 static inline float compress_volume(float volume) {
-   float t = g.settings.triglevel;
-   if (g.settings.compress == 1) {
-      if (volume < t) return 2 * volume;
-      return 1.5 * t + 0.5 * volume;
-   }
-   if (g.settings.compress == 2) {
-      if (volume < t) return 3 * volume;
-      return 3 * t;
-   }
-   return volume;
+   if (volume > g.settings.complevel) return volume;
+   if (volume > 0.2 * g.settings.complevel) return g.settings.complevel;
+   return 5.0 * volume;
 }
 
 
@@ -318,7 +254,7 @@ static void set_message(float lambda, float volume) {
       (2 * t.thismax > 3 * t.prevmax && 9 * volume > 10 * t.prevvolume))) {
       mtype = MTYPE_TRIG;
    }
-   g.message.type = mtype; // Message is atomic. This is written last.
+   g.message.type = mtype; // <-- Message is atomic. This is written last!
    t.prevmax = t.thismax;
    t.prevvolume = volume;
    t.prevlambda = lambda;
@@ -599,12 +535,8 @@ int moly_init(uint32_t sampleFrequency) {
    g.settings.dryvolume = 0.0;
    g.settings.wetvolume = 0.5;
    g.settings.triglevel = 0.08;
-   g.settings.envelmix = 0;
+   g.settings.complevel = 0.0;
    g.settings.verbose = 0;
-   g.synth.attack = 0.02;
-   g.synth.decay = 0.02;
-   g.synth.sustain = 0.3;
-   g.synth.release = 0.02;
    return 0;
 }
 
@@ -626,7 +558,7 @@ struct moly_message* moly_analyze(void) {
    P("%zu %.2f  ",  t.time, t.thismax);
 
    // Silence?
-   if (t.thismax < g.settings.triglevel / 2 || 
+   if (t.thismax < SILENCE_LEVEL || 
       (t.prevlambda == 0.0 && t.thismax < g.settings.triglevel)) {
       set_message(0.0, 0.0);
       goto bail;
@@ -645,16 +577,10 @@ struct moly_message* moly_analyze(void) {
 
 
 void moly_set(char opt, float val) {
-   if (opt == 'y') g.settings.dryvolume = val;
-   if (opt == 'e') g.settings.wetvolume = val;
-   if (opt == 'i') g.settings.triglevel = val;
-   if (opt == 'c') g.settings.compress = (int)val;
-   if (opt == 'x') g.settings.envelmix = (int)val;
+   if (opt == 'd') g.settings.dryvolume = val;
+   if (opt == 'w') g.settings.wetvolume = val;
+   if (opt == 't') g.settings.triglevel = val;
+   if (opt == 'c') g.settings.complevel = val;
    if (opt == 'v') g.settings.verbose = (int)val;
-   // Synth
-   if (opt == 'a') g.synth.attack = val;
-   if (opt == 'd') g.synth.decay = val;
-   if (opt == 's') g.synth.sustain = val;
-   if (opt == 'r') g.synth.release = val;
- }
+}
 
