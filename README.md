@@ -89,14 +89,14 @@ Anyway, you can use this code as a framework for trying out your own ideas.
 
 | CONTROL | DESCRIPTION | NOTES |
 |-|-|-|
-| KNOB 1 | Sensitivity |  |
-| KNOB 2 | Dry volume |  |
-| KNOB 3 | Wet volume |  |
-| KNOB 4 | Attack/Decay |  (Need more knobs...) |
-| KNOB 5 | Sustain |  |
-| KNOB 6 | Release |  |
-| SWITCH 1 | Wave form | **SQUARE** - <br/>**SAWTOOTH** - <br/>**TRIANGLE** -  |
-| SWITCH 2 | Autotune | **AUTOTUNE** - <br/>**OFF** - <br/>**SLIDE** - |
-| SWITCH 3 | Envelope | **ADSR** - <br/>**INSTRUMENT** - <br/>**AR+INSTRUMENT** - |
-| FOOTSWITCH 1 | Octave same | Octave down |
-| FOOTSWITCH 2 | Bypass | Molysynth |
+| KNOB 1 | Trig level   |  |
+| KNOB 2 | Dry volume   |  |
+| KNOB 3 | Wet volume   |  |
+| KNOB 4 | Attack       |  |
+| KNOB 5 | Release      |  |
+| KNOB 6 | Unused       |  |
+| SWITCH 3 | LP Filter       | off - on |
+| SWITCH 1 | Dry Compression | off - some - max |
+| SWITCH 2 | Wet Compression | off - some - max |
+| FOOTSWITCH 1 | Unused |  |
+| FOOTSWITCH 2 | Bypass |  |
