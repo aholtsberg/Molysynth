@@ -70,14 +70,17 @@ struct {
 // The tracker
 struct {
 
-   // For ringbuffer
+   // Ringbuffer analysis
    uint16_t i;
    uint16_t i_previous;
    size_t time;
-
-   // For remembering extreme points between calls
-   int xi;
+   uint16_t xi;
    float xv;
+   struct zevent {
+      uint16_t i; // zerocrossing index
+      uint16_t xi; // extreme value index
+      float xv; // extreme value
+   } z[ZSIZE];
 
    // Temporaries
    float thismax;
@@ -91,13 +94,6 @@ struct {
    float acf_m2;
    int acf_len;
    char autotune_name[4];
-
-   // The latest zero crossings
-   struct zevent {
-      uint16_t i; // zerocrossing index in ringbuffer
-      uint16_t xi; // extreme value index in ringbuffer
-      float xv; // extreme value
-   } z[ZSIZE];
 
 } t;
 
@@ -113,7 +109,7 @@ inline static float lpfilter(float x) {
 }
 
 
-// Exported directly
+// Exported! Filtering is necessary to bring down the number of zero crossings.
 void moly_addtobuf(const float *in, size_t size) {
    for (size_t i = 0; i < size; i++) {
       g.ring.buf[g.ring.i++] = lpfilter(in[i]);
@@ -197,7 +193,7 @@ static void add_dry(const float *in, float *out, size_t size) {
 }
 
 
-//================================================================= ZEVENTS ===
+//==================================================== ZERO CROSSING EVENTS ===
 
 
 static void zevent_add(int i, int xi, float xv) {
@@ -214,7 +210,7 @@ static void zevents_wipeout(void) {
    for (int k = 0; k < ZSIZE; k++) {
       t.z[k].i = 0;
       t.z[k].xi = 0;
-      t.z[k].xv = 0;
+      t.z[k].xv = 0.0;
    }
 }
 
@@ -233,6 +229,7 @@ static inline float compress_volume(float volume) {
 
 
 static void set_message(float lambda, float volume) {
+
    // Problem?
    if (lambda == 0.0 && volume > 0.0) {
       if (t.prevvolume > 0.0) {
@@ -242,10 +239,8 @@ static void set_message(float lambda, float volume) {
       }
    }
 
-   // Write new message
+   // Side effects for silence and trigger
    int mtype = MTYPE_NEW;
-   g.message.lambda = lambda;
-   g.message.volume = compress_volume(volume);
    if (volume == 0.0) {
       zevents_wipeout();
       t.lambda_raw = 0;
@@ -254,10 +249,16 @@ static void set_message(float lambda, float volume) {
       (2 * t.thismax > 3 * t.prevmax && 9 * volume > 10 * t.prevvolume))) {
       mtype = MTYPE_TRIG;
    }
-   g.message.type = mtype; // <-- Message is atomic. This is written last!
+
+   // Remember these
    t.prevmax = t.thismax;
    t.prevvolume = volume;
    t.prevlambda = lambda;
+
+   // Write new message
+   g.message.lambda = lambda;
+   g.message.volume = compress_volume(volume);
+   g.message.type = mtype; // <-- Message is atomic. This is written last!
    P("%3.1f %5.3f ", g.message.lambda, g.message.volume);
    if (mtype == MTYPE_TRIG) {
        P("T ");
@@ -267,7 +268,7 @@ static void set_message(float lambda, float volume) {
 
 static void t_update(void) {
 
-   // We note that g.ring.i can change under our feet so we copy it once.
+   // We note that g.ring.i can change under our feet so we copy it first.
    t.i_previous = t.i;
    t.i = g.ring.i;
    t.time = g.ring.time; // Only for debug, no need for semaphore
@@ -313,7 +314,6 @@ static bool peakisfeasable(int i, float limit) {
 }
 
 
-// Note: checklambda returns -1 for 0. That is correct.
 static int checklambda(int lambda) {
    if (lambda < LAMBDA_MIN || lambda > LAMBDA_MAX) return 0;
    return lambda;
@@ -342,7 +342,7 @@ static bool lambdas_are_close(int lambda1, int lambda2) {
 }
 
 
-static int picklambdaraw(int lm0, int lm1) {
+static int pick_lambda_raw(int lm0, int lm1) {
    lm0 = checklambda(lm0);
    lm1 = checklambda(lm1);
 
@@ -361,7 +361,7 @@ static int picklambdaraw(int lm0, int lm1) {
 }
 
 
-static void t_lambda_raw_oneside(int i_start, float *xv, int lambda[3]) {
+static void t_lambda_raw_oneside(int i_start, int lambda[3]) {
    int j[2];
    int k = 0;
    float limit = t.thismax / 2;
@@ -386,24 +386,20 @@ static void t_lambda_raw_oneside(int i_start, float *xv, int lambda[3]) {
       }
       lambda[1] = (t.z[j[0]].xi - t.z[j[1]].xi) & RING_MASK; // extreme value
       lambda[2] = (t.z[j[0]].i - t.z[j[1]].i) & RING_MASK; // crossing 2
-      *xv = (t.z[j[0]].xv + t.z[j[1]].xv) / 2;
-      if (*xv < 0) *xv = -*xv;
    }
 }
 
 
 static void t_lambda_raw(void) {
    int lambda[2][3] = {0};
-   float xv[2] = {0};
-
-   t_lambda_raw_oneside(0, xv + 0, lambda[0]);
-   t_lambda_raw_oneside(1, xv + 1, lambda[1]);
+   t_lambda_raw_oneside(0, lambda[0]);
+   t_lambda_raw_oneside(1, lambda[1]);
 
    P("%3d %3d %3d  %3d %3d %3d ",
    lambda[0][0], lambda[0][1], lambda[0][2],
    lambda[1][0], lambda[1][1], lambda[1][2]);
 
-   t.lambda_raw = picklambdaraw(median3(lambda[0]), median3(lambda[1]));
+   t.lambda_raw = pick_lambda_raw(median3(lambda[0]), median3(lambda[1]));
    P(" %3d  ", t.lambda_raw);
 }
 
@@ -564,7 +560,7 @@ struct moly_message* moly_analyze(void) {
       goto bail;
    }
 
-   // Lambda and lambda. NOTE: We must create message, so set_message will
+   // Lambda and lambda. NOTE: We must create a message, so set_message will
    // take care of when things go wrong and lambda is 0.0.
    t_lambda_raw();
    t_lambda_acf();
