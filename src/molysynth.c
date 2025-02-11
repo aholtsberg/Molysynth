@@ -342,6 +342,61 @@ static bool lambdas_are_close(int lambda1, int lambda2) {
 }
 
 
+static bool bumpfitsmuchbetter(int i, int j, int k) {
+   uint16_t ui, uj, uk;
+   float di, dj, dk, tmp;
+   float mj, mk;
+   if (k > 16 || t.z[k + 1].xv == 0.0) return false;    
+
+   // Mismatch distance left to peak
+   ui = t.z[i].xi - t.z[i + 1].i + 1;
+   uj = t.z[j].xi - t.z[j + 1].i + 1;
+   uk = t.z[k].xi - t.z[k + 1].i + 1;
+   dj = (float)(int16_t)(uj - ui);
+   dk = (float)(int16_t)(uk - ui);
+   dj = dj * dj;
+   dk = dk * dk;
+   di = ui * ui;
+   mj = dj / di;
+   mk = dk / di;
+
+   // Mismatch distance peak to right
+   ui = t.z[i].i - t.z[i].xi + 1;
+   uj = t.z[j].i - t.z[j].xi + 1;
+   uk = t.z[k].i - t.z[k].xi + 1;
+   dj = (float)(int16_t)(uj - ui);
+   dk = (float)(int16_t)(uk - ui);
+   dj = dj * dj;
+   dk = dk * dk;
+   di = ui * ui;
+
+   // One side can move around heavily if a peak moves through zero.
+   // Hopefully this happens only on one side.
+   tmp = dj / di;
+   if (tmp < mj) mj = tmp;
+   tmp = dk / di;
+   if (tmp < mk) mk = tmp;
+
+   // Mismatch peak height
+   di = t.z[i].xv;
+   dj = t.z[j].xv; 
+   dk = t.z[k].xv;
+   dj = dj - di;
+   dj = dj * dj;
+   dk = dk - di;
+   dk = dk * dk;
+   di = di * di;
+   mj += dj / di;
+   mk += dk / di;
+
+   P("\nX %d %d %d %0.5f %0.5f\n", i, j, k, mj, mk);
+   if (mj > 0.01 && 16.0 * mk < mj) {
+      return true;
+   }
+   return false;
+}
+
+
 static int pick_lambda_raw(int lm0, int lm1) {
    lm0 = checklambda(lm0);
    lm1 = checklambda(lm1);
@@ -365,6 +420,7 @@ static void t_lambda_raw_oneside(int i_start, int lambda[3]) {
    int j[2];
    int k = 0;
    float limit = t.thismax / 2;
+   // Note: every second peak is on the same side, therefore += 2
    for (int i = i_start; i < ZSIZE - 1; i += 2) {
       if (peakisfeasable(i, limit)) {
          int lim = 3.0 * t.z[i].xv / 4.0;
@@ -373,10 +429,21 @@ static void t_lambda_raw_oneside(int i_start, int lambda[3]) {
             limit = lim;
             continue;
          }
+         if (k == 1) {
+            // Let me talk to you at this point. Now we are about to make the 
+            // decision. Here is a match. But wait a second. A main problem is
+            // that the first overtone can be a lot stronger than the 
+            // fundamental frequency. What we are going to do now is to check
+            // the next bump back to see if it fits substantially better than
+            // this one. In that case we take that one instead.
+            if (bumpfitsmuchbetter(j[0], i, i + 2)) {
+               i += 2;
+            }
+         }
          j[k++] = i;
+         if (k == 2) break;
          limit = 3.0 * t.z[i].xv / 4.0;
          if (limit < 0) limit = -limit;
-         if (k == 2) break;
       }
    }
    if (k == 2) {
@@ -489,7 +556,8 @@ static float meandiff2(int lambda) {
 static void t_lambda_acf() {
    if (t.lambda_raw == 0.0) {
       t.lambda_acf = 0.0;
-      goto bail;
+      P("\n"); 
+      return;
    }
 
    int lM = t.lambda_raw;
@@ -516,7 +584,6 @@ static void t_lambda_acf() {
    }
    t.lambda_acf = lHat;
 
-   bail:
    P("%5.1f ", t.lambda_acf);
    return;
 }
@@ -551,7 +618,7 @@ void moly_synth_message(struct moly_message *m) {
 
 struct moly_message* moly_analyze(void) {
    t_update();
-   P("%zu %.2f  ",  t.time, t.thismax);
+   P("%zu %.2f  ", t.time, t.thismax);
 
    // Silence?
    if (t.thismax < SILENCE_LEVEL || 
@@ -563,6 +630,7 @@ struct moly_message* moly_analyze(void) {
    // Lambda and lambda. NOTE: We must create a message, so set_message will
    // take care of when things go wrong and lambda is 0.0.
    t_lambda_raw();
+   //t_check_octave();
    t_lambda_acf();
    set_message(t.lambda_acf, t.volume);
 

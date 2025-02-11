@@ -50,7 +50,8 @@ void AudioCallback(
   }
 
   // The real stuff
-  moly_callback(in[0], out[0], size);
+  moly_addtobuf(in[0], size);
+  moly_synth(in[0], out[0], size);
   for (size_t i = 0; i < size; i++) {
     out[1][i] = out[0][i];
   }
@@ -58,7 +59,6 @@ void AudioCallback(
 
 
 int main() {
-  int k;
 
   // Init
   hw.Init();
