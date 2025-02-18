@@ -2,9 +2,9 @@
 
 Contributed by Anders Holtsberg \<<anders.holtsberg@gmail.com>\>
 
-Molysynth is an open-source electric molyphonic guitar pitch tracker. 
-It demonstrates a simple way to develop real time sound algorithms off-line. 
-The programming language is C. Only C. KISS to you from me.
+Molysynth is an open-source electric monophonic guitar pitch tracker. 
+It also demonstrates a simple way to develop real time sound algorithms off-line. 
+The programming language is C. Only C, written in a style I enjoy.
 
 You are only interested in this package if you are interested in
    * music instrument real-time __pitch tracking__ in general, or
@@ -29,7 +29,7 @@ The design choice here is to develop it like it resides in the
 HothouseExamples source tree.
 But actually, you don't have to download _any_ other source code. This repo is
 totally self sufficient until you actually want to put the code on a DSP. 
-You can just enjoy developing off-line without any dependencies.
+You can just enjoy exploring ideas off-line without any dependencies.
 
 To repeat: if you have the Cleveland Music Hothouse source code then put this at the 
 expected place. If you don't, then download and enjoy anyway. Did I mention that 
@@ -39,7 +39,7 @@ it has _no_ dependencies?
      Hothouse project. But
      this is just a thin wrapper and for off-line development this is not
      needed. For off-line development we use the libraries __src__, __dev__ 
-     and __dat__.
+     and __wav__.
    * The __src__ library contains the real source code in `molysynth.c` with
      no dependencies at all on Daisy Seed.
    * The __dev__ library contains code for working off-line with WAV files.
@@ -50,7 +50,7 @@ it has _no_ dependencies?
      If you use Python then maybe
      that notebook can simply be an inspiration or maybe you have your own way 
      of looking at WAV files.
-   * The __dat__ library contains a WAV file to get you started. I use Garage Band
+   * The __wav__ library contains a WAV file to get you started. I use Garage Band
      to record my own WAV files to experiment with. 
 
 Anyway, just download this to your machine and go into __dev__ and do `make test`
@@ -76,13 +76,15 @@ I have yet to analyze __Boss SY-1__ to find out what is actually going on inside
 Anyway, you can use this code as a framework for trying out your own ideas.
 
 
-## Future work
+## Ideas for future work
 
 Some future work remains in the tracker. Autotune is not mentioned since I tried it
-and it makes no sense to have it, simply because it feels no good to play with it. 
+and it makes no sense having it, simply because it feels no good to play with it and
+I don't want to put development efforts into something that will not be used. Tell
+me if you need it and I may put it back. 
 
   * Add FFT and make it experiment with polyphonic tracking.
-  * Better tracking when the previous tone is still sounding.
+  * Better tracking when the previous tone is still sounding on another string.
 
 Here are some ideas you can try out.
 
@@ -91,7 +93,9 @@ Here are some ideas you can try out.
   * Suppose you drive this with a nice sounding guitar with overdrive and
     effects. What are the background sound effects you can generate driven by the
     by this tracker?
-  * What if you vary a linear filter cutoff frequency with the output of the tracker?
+  * What if you do not use it for a sound source but instead for controlling a
+    linear filter's parameters with the output of the tracker?
+  * What about using it for a harmonizer?
 
 
 ## Hothouse controls

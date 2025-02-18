@@ -34,6 +34,7 @@ using daisy::SaiHandle;
 Hothouse hw;
 Led led_bypass;
 bool bypass = true;
+int mytimer = 10;
 
 
 void AudioCallback(
@@ -41,6 +42,8 @@ void AudioCallback(
   AudioHandle::OutputBuffer out,
   size_t size)
 {
+  if (--mytimer == 0) mytimer = 0;
+
   // Bypass
   if (bypass) {
     for (size_t i = 0; i < size; i++) {
@@ -71,17 +74,11 @@ int main() {
   hw.StartAudio(AudioCallback);
 
   while (true) {
-    hw.DelayMs(10);
-
-    // Knobs and switches
-    // Note: wet volume should have same volume as dry volume. It has been preset
-    // for off-line WAV, but for Hothouse it seems like ratio 2.0 is more fitting.  
     hw.ProcessAllControls();
-    moly_set(MOLY_TRIGLEVEL, 0.2 * hw.knobs[0].Process());
+    moly_set(MOLY_TRIGLEVEL, 0.1 * hw.knobs[0].Process());
     moly_set(MOLY_DRYVOLUME, 2.0 * hw.knobs[1].Process());
     moly_set(MOLY_WETVOLUME, hw.knobs[2].Process());
     moly_set(MOLY_COMPLEVEL, hw.knobs[3].Process());
-    // Toggle effect bypass LED when footswitch is pressed
     bypass ^= hw.switches[Hothouse::FOOTSWITCH_2].RisingEdge();
     led_bypass.Set(bypass ? 0.0f : 1.0f);
     led_bypass.Update();
@@ -89,8 +86,11 @@ int main() {
     // Call System::ResetToBootloader() if FOOTSWITCH_1 is pressed for 2 seconds
     hw.CheckResetToBootloader();
 
-    // Main workload
+    // Main workload; we call this every 10*48 samples, ie 100 times per second
+    hw.DelayMs(mytimer);
+    mytimer = 10;
     moly_analyze();
   }
+
   return 0;
 }

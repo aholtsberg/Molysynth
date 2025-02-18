@@ -1,3 +1,11 @@
+// Copyright (C) 2025 Anders Holtsberg <anders.holtsberg@gmail.com>
+//
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by the
+// Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.
+
+
 #include <math.h>
 #include <string.h>
 #include "molysynth.h"
@@ -112,7 +120,7 @@ inline static float lpfilter(float x) {
 // Exported! Filtering is necessary to bring down the number of zero crossings.
 void moly_addtobuf(const float *in, size_t size) {
    for (size_t i = 0; i < size; i++) {
-      g.ring.buf[g.ring.i++] = lpfilter(in[i]);
+      g.ring.buf[g.ring.i++] = lpfilter(in[i]); // uint16_t for ringbuffer :-)
    }
    g.ring.time += size;
 }
@@ -168,6 +176,10 @@ static inline void synthesizer(float *out, size_t size) {
    for (size_t i = 0; i < size; i++) {
        float phi = g.synth.phi + phidelta;
        float x = 1.0;
+       // This hoopla is because we have to interpolate when the square wave
+       // jumps. This is likely well known to you folks out there but I
+       // discovered it the hard way. If this is not done, then it sounds
+       // really bad. 
        if (phi < 0.5) {
           // do nothing
        } else if (phi >= 1.0) {
@@ -389,8 +401,8 @@ static bool bumpfitsmuchbetter(int i, int j, int k) {
    mj += dj / di;
    mk += dk / di;
 
-   P("\nX %d %d %d %0.5f %0.5f\n", i, j, k, mj, mk);
-   if (mj > 0.01 && 16.0 * mk < mj) {
+   //P("\nX %d %d %d %0.5f %0.5f\n", i, j, k, mj, mk);
+   if (mj > 0.05 && 16.0 * mk < mj) {
       return true;
    }
    return false;
@@ -556,7 +568,6 @@ static float meandiff2(int lambda) {
 static void t_lambda_acf() {
    if (t.lambda_raw == 0.0) {
       t.lambda_acf = 0.0;
-      P("\n"); 
       return;
    }
 
@@ -572,8 +583,7 @@ static void t_lambda_acf() {
    //P("[(%d)%.5f %.5f %.5f(%d)] ", lL, dL, dM, dR, lR);
    float b = dR - dL;
    float c = dR - 2.0 * dM + dL;
-   if (c == 0.0) {
-      // TODO 
+   if (c <= 0.0) {
       t.lambda_acf = 0.0;
       t.lambda_fit = 0.0;
       return;

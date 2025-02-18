@@ -12,20 +12,21 @@ char helptext[] =
 "SYNOPSIS\n"
 "       moly [options] wavfile\n\n"
 "DESCRIPTION\n"
-"       This is a command line tool for experimenting with pitch tracking.\n"
+"       This is a command line tool for experimenting with guitar pitch tracking.\n"
 "\n"
 "       -v  Verbose, print one line per processed pitch estimation.\n"
+"       -o  Output file, tmp.wav is default.\n"
 "\n"
 "       All following arguments each take a floating point argument (defaults\n"
-"       in parentheses)."
+"       in parentheses).\n"
 "\n"
 "       ### Pitch tracker\n"
 "       -t  Trig level (0.08)\n"
-"       -c  Compress (0.0)"
+"       -c  Compress (0.0)\n"
 "\n"
 "       ### Synth\n"
 "       -d  Dryvolume (0.0)\n"
-"       -w  Wetvolume (1.0)\n"
+"       -w  Wetvolume (0.5)\n"
 "\n";
 
 struct format {
@@ -129,8 +130,8 @@ void wavInit(struct session *o, uint8_t *m, int optPrintInfo) {
 FILE* wavout;
 size_t wavout_here;
 
-void wavout_start(void) {
-   wavout = fopen("tmp.wav", "wb");
+void wavout_start(char *filename) {
+   wavout = fopen(filename, "wb");
    assert(wavout);
    fprintf(wavout, "RIFF....WAVE");
    fwrite("fmt \x10\0\0\0\x01\0\x01\0\x44\xAC\0\0\x88\x58\x01\0\x02\0\x10\0", 
@@ -191,7 +192,8 @@ float optarg(char *c) {
 
 
 int main(int argc, char *argv[]) {
-   char *filename = 0;
+   char *fileIn = 0;
+   char *fileOut = "tmp.wav";
    int optPrintInfo = 0;
 
    moly_init(44100.0);
@@ -206,10 +208,20 @@ int main(int argc, char *argv[]) {
             moly_set('v', 1.0);
          } else if (!strcmp(argv[i], "-p")) {
             optPrintInfo = 1;
+         } else if (!strcmp(argv[i], "-o")) {
+            ++i;
+            assert(i < argc);
+            fileOut = argv[i];
          } else if (argv[i][0] == '-') {
             int c = argv[i][1];
             if (index("tcdw", c)) {
-               moly_set(c, optarg(&argv[i][2]));
+               char *p = argv[i] + 2;
+               if (*p == '\0') {
+                  ++i;
+                  assert(i < argc);
+                  p = argv[i];
+               }
+               moly_set(c, optarg(p));
             } else {
                goto bail;
             }
@@ -220,20 +232,20 @@ int main(int argc, char *argv[]) {
          }
       }
       else {
-         filename = argv[i];
+         fileIn = argv[i];
       }
    }
-   if (!filename) {
+   if (!fileIn) {
       printf("%s", helptext);
       exit(1);
    }
 
    // Open
-   struct session *o = newSession(filename, optPrintInfo);
-   wavout_start();
+   struct session *o = newSession(fileIn, optPrintInfo);
+   wavout_start(fileOut);
 
    // Process and make a linked list of everything
-   int acount = 0;
+   int mycount = 0;
    float inbuf[BSZ];
    float outbuf[BSZ];
    while (o->p <= o->p_end - BSZ * 2) {
@@ -245,7 +257,6 @@ int main(int argc, char *argv[]) {
       }
 
       // 2. High priority
-      //moly_callback(inbuf, outbuf, BSZ);
       moly_addtobuf(inbuf, BSZ);
       moly_synth(inbuf, outbuf, BSZ); // <-- Replace by your own synth
 
@@ -262,9 +273,8 @@ int main(int argc, char *argv[]) {
       // To simulate a real DSP system, where the analysis is in low-priority,
       // we run the main analyze function every 10th time which is about 100 
       // times per second.
-      if (++acount == 10) {
-         acount = 0;
-         //moly_analyze();
+      if (++mycount == 10) {
+         mycount = 0;
          struct moly_message *m = moly_analyze();
          moly_synth_message(m); // <-- Replace by your own synth
       }
