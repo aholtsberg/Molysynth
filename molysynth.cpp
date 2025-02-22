@@ -42,7 +42,7 @@ void AudioCallback(
   AudioHandle::OutputBuffer out,
   size_t size)
 {
-  if (--mytimer == 0) mytimer = 0;
+  if (--mytimer < 0) mytimer = 0;
 
   // Bypass
   if (bypass) {

@@ -597,22 +597,24 @@ static float meandiff2(int lambda) {
 
 
 static float t_lambda_acf(int lM) {
+   float dL, dM, dR, b, c;
+   int lL, lR, delta;
    float lHat = 0.0;
    if (lM == 0) {
       goto bail;
    }
-   int delta = lM / 50; // Halftone approximately
+   delta = lM / 50; // Halftone approximately
    if (delta < 2) delta = 2;
-   int lL = lM - delta;
-   int lR = lM + delta;
-   float dM = meandiff2mid(lM);
+   lL = lM - delta;
+   lR = lM + delta;
+   dM = meandiff2mid(lM);
    if (t.acf_d2 > ACFD2_MAX) {
       goto bail;
    }
-   float dL = meandiff2(lL);
-   float dR = meandiff2(lR);
-   float b = dR - dL;
-   float c = dR - 2.0 * dM + dL;
+   dL = meandiff2(lL);
+   dR = meandiff2(lR);
+   b = dR - dL;
+   c = dR - 2.0 * dM + dL;
    if (c <= 0.0) {
       goto bail;
    }
@@ -653,6 +655,7 @@ void moly_synth_message(struct moly_message *m) {
 
 
 struct moly_message* moly_analyze(void) {
+   float d2;
    t_update();
    P("%zu %.3f  ", t.time, t.thismax);
 
@@ -665,7 +668,7 @@ struct moly_message* moly_analyze(void) {
 
    // Not silence!
    t.lambda_acf = 0.0;
-   float d2 = ACFD2_MAX;
+   d2 = ACFD2_MAX;
    if (t.prevlambda != 0.0) {
       //t.lambda_acf = t_lambda_acf(t.lambda_raw);
       if (t.lambda_acf != 0.0) d2 = t.acf_d2;
