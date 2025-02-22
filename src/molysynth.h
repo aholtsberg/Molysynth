@@ -41,13 +41,13 @@
 // NOTE 2: There is no TRIG_OFF message, silence is only marked with volume 0.0,
 //   and TRIG can arrive without silence in between.
 //
-// NOTE 3: The receiver (the synth) may write type 0 in the message on order to
+// NOTE 3: The receiver (the synth) may write type 0 in the message in order to
 //   remember that the message has already been read.
 //
 // NOTE 4: The whole hoopla here is for making it very easy for you to replace 
 //   the synth with your synth, or harmonizer or adaptive filter or whatever.
 //
-// NOTE 5: The volume can be compressed The raw volume is also in the message 
+// NOTE 5: The volume can be compressed. The raw volume is also in the message 
 //   just in case someone wants it besides the compressed volume.
 
 #define MOLY_MTYPE_CONTINUE 1 // No trig
@@ -71,7 +71,7 @@ struct moly_message *moly_analyze(void);
 void moly_synth(const float *in, float *out, size_t bsz);
 void moly_synth_message(struct moly_message *m);
 
-// Any time we can change the settings
+// At any time we can change the settings
 void moly_set(char opt, float val);
 
 #endif

@@ -32,8 +32,7 @@ totally self sufficient until you actually want to put the code on a DSP.
 You can just enjoy exploring ideas off-line without any dependencies.
 
 To repeat: if you have the Cleveland Music Hothouse source code then put this at the 
-expected place. If you don't, then download and enjoy anyway. Did I mention that 
-it has _no_ dependencies?
+expected place. If you don't, then download and enjoy anyway. 
 
    * In the top level library we have the file `molysynth.cpp` as usual in a
      Hothouse project. But
@@ -59,7 +58,9 @@ and listen and enjoy.
 
 ## Goals
 
-The goal in the end will be to track a lot better than the competition, ie 
+The goal in the end will be to build an open source tracker. A pitch tracker
+is something that converts the guitar signal to a stream of frequency + volume 
+messages in pedals like 
 
  * __Electro-Harmonix mono__
  * __Keeley synth 1__
@@ -67,11 +68,17 @@ The goal in the end will be to track a lot better than the competition, ie
 Also, harmonizers, like __Mooer Harmony X2__ use a pitch tracker.
 
 Note that __Mooer E7__ is _not_ a synth despite the name, not in the meaning 
-used here.
-It does not synthesize the direct sound - yes it adds synthesized ambient sound and
-stuff but the acual base frequencies when playing chords come from the guitar. 
+used here, because
+it does not synthesize the direct sound - yes it adds synthesized ambient
+sound and stuff but the acual fundamental sound when playing chords seems to
+come from the guitar itself. I have yet to analyze __Boss SY-1__ to find out
+what is actually going on inside it.
 
-I have yet to analyze __Boss SY-1__ to find out what is actually going on inside it.
+Note that the example wav file is played on a guitarra baiana, that is an 
+instrument tuned in fifths starting with C, so the little strange sounds
+that can be heard in the scale come from the G plucked when the F is still 
+sounding, and likewise for A when C is still sounding. That is a research
+problem to fix that. 
 
 Anyway, you can use this code as a framework for trying out your own ideas.
 
@@ -79,7 +86,7 @@ Anyway, you can use this code as a framework for trying out your own ideas.
 ## Ideas for future work
 
 Some future work remains in the tracker. Autotune is not mentioned since I tried it
-and it makes no sense having it, simply because it feels no good to play with it and
+and it makes no sense having it, simply because it feels no good playing with it and
 I don't want to put development efforts into something that will not be used. Tell
 me if you need it and I may put it back. 
 

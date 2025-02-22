@@ -16,6 +16,7 @@ char helptext[] =
 "\n"
 "       -v  Verbose, print one line per processed pitch estimation.\n"
 "       -o  Output file, tmp.wav is default.\n"
+"       -p  Print info about infile."
 "\n"
 "       All following arguments each take a floating point argument (defaults\n"
 "       in parentheses).\n"

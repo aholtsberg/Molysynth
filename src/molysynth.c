@@ -28,7 +28,7 @@
 #define MTYPE_TRIG 2
 #define RING_MASK ((1<<16) - 1)
 #define SILENCE_LEVEL (0.25 * g.settings.triglevel)
-
+#define ACFD2_MAX 0.5
 
 // Various globals
 struct {
@@ -74,11 +74,9 @@ struct {
 
 #define ZSIZE 32
 
-
 // The tracker
 struct {
-
-   // Ringbuffer analysis
+   // Ringbuffer
    uint16_t i;
    uint16_t i_previous;
    size_t time;
@@ -90,7 +88,9 @@ struct {
       float xv; // extreme value
    } z[ZSIZE];
 
-   // Temporaries
+   // Other stuff
+   bool trig;
+   bool locked;
    float thismax;
    float prevmax;
    float prevvolume;
@@ -98,11 +98,9 @@ struct {
    int lambda_raw;
    float lambda_acf;
    float volume;
-   float lambda_fit;
    float acf_m2;
+   float acf_d2;
    int acf_len;
-   char autotune_name[4];
-
 } t;
 
 
@@ -257,13 +255,14 @@ static void set_message(float lambda, float volume) {
       zevents_wipeout();
       t.lambda_raw = 0;
       t.lambda_acf = 0.0;
-   } else if (volume > 0.0 && (t.prevvolume == 0.0 ||
-      (2 * t.thismax > 3 * t.prevmax && 9 * volume > 10 * t.prevvolume))) {
+      t.trig = false;
+      t.locked = false;
+   } else if (t.trig) {
       mtype = MTYPE_TRIG;
+      t.trig = false;
    }
 
    // Remember these
-   t.prevmax = t.thismax;
    t.prevvolume = volume;
    t.prevlambda = lambda;
 
@@ -285,8 +284,9 @@ static void t_update(void) {
    t.i = g.ring.i;
    t.time = g.ring.time; // Only for debug, no need for semaphore
 
-   // Find new zero crossings (and compute thismax on the fly).
-   t.thismax = 0.0;
+   // Find new zero crossings.
+   float themin = 0.0;
+   float themax = 0.0;
    float x0;
    float x1 = g.ring.buf[t.i_previous - 1];
    for (uint16_t i = t.i_previous; i != t.i; i++) {
@@ -310,10 +310,20 @@ static void t_update(void) {
             t.xv = x1; t.xi = i;
          }
       }
-      if (x1 > t.thismax) t.thismax = x1;
-      if (-x1 > t.thismax) t.thismax = -x1;
+      if (x1 > themax) themax = x1;
+      if (x1 < themin) themin = x1;
    }
+   // t.thismax = (themax - themin) / 2.0; // Not really as good :-(
+    t.thismax = themax > -themin? themax: -themin;
+   //float tmp = themax > -themin? themax: -themin;
+   //t.thismax = 0.75 * t.thismax + 0.25 * tmp;
 
+   // We compute trig already here so the analysis can use it
+   if ((t.prevlambda == 0.0 && t.thismax > g.settings.triglevel) ||
+      (3 * t.thismax > 4 * t.prevmax)) {
+      t.trig = true;
+   }
+   t.prevmax = t.thismax;
 }
 
 
@@ -347,9 +357,9 @@ static int median3(int *p) {
 
 
 static bool lambdas_are_close(int lambda1, int lambda2) {
-   int halfnote = lambda2 >> 4;
-   if (lambda1 > lambda2 + halfnote) return false;
-   if (lambda2 > lambda1 + halfnote) return false;
+   int wholenote = lambda2 >> 3;
+   if (lambda1 > lambda2 + wholenote) return false;
+   if (lambda2 > lambda1 + wholenote) return false;
    return true;
 }
 
@@ -402,7 +412,7 @@ static bool bumpfitsmuchbetter(int i, int j, int k) {
    mk += dk / di;
 
    //P("\nX %d %d %d %0.5f %0.5f\n", i, j, k, mj, mk);
-   if (mj > 0.05 && 16.0 * mk < mj) {
+   if (mj > 0.01 && 16.0 * mk < mj) { // mj is squared, so it is 1/10 and 1/4
       return true;
    }
    return false;
@@ -412,19 +422,40 @@ static bool bumpfitsmuchbetter(int i, int j, int k) {
 static int pick_lambda_raw(int lm0, int lm1) {
    lm0 = checklambda(lm0);
    lm1 = checklambda(lm1);
+   int lambda = 0;
+   int prevlambda = (int)t.prevlambda;
 
-   // If one fails, the other may be functioning
-   if (lm0 == 0) return lm1;
-   if (lm1 == 0) return lm0;
+   // Find a good lambda
+   if (lm0 == 0) {
+      lambda = lm1;
+   }
+   else if (lm1 == 0) {
+      lambda = lm0;
+   }
+   else if (lambdas_are_close(lm0, lm1)) {
+      lambda = (lm0 + lm1) / 2;
+   }
+   else if (prevlambda == 0) {
+      return 0;
+   }
+   else {
+      if (lambdas_are_close(lm0, prevlambda)) return lm0;
+      if (lambdas_are_close(lm1, prevlambda)) return lm1;
+   }
+   if (lambda == 0) return 0;
 
-   // This is what we want
-   if (lambdas_are_close(lm0, lm1)) return (lm0 + lm1) / 2;
+   // Now we come to part two. What if both sides have gone an octave up to
+   // the first overtone? We simply override it.
+   if (t.locked && lambdas_are_close(2 * lambda, prevlambda)) {
+      lambda = lambda * 2;
+   }
 
-   // Check with history otherwise
-   if (t.lambda_raw == 0) return 0;
-   if (lambdas_are_close(lm0, t.lambda_raw)) return  lm0;
-   if (lambdas_are_close(lm1, t.lambda_raw)) return  lm1;
-   return 0;
+   // Also, it happens that bumpfitsmuchbetter because there is another tone
+   // interferring and resulting in octave down. We correct it. 
+   if (t.locked && lambdas_are_close(lambda, 2 * prevlambda)) {
+      lambda = prevlambda;
+   }
+   return lambda;
 }
 
 
@@ -521,11 +552,11 @@ static float meandiff2mid(int lambda) {
          m2first = m2; // Not m2t, see above
          m2 += m2t; // Note that m2 now has energy from two cycles
       } else {
-         // As long as cycle error has not doubled (OR cycle error grows 
-         // to more than 20 percent of first cycle energy) AND cycle energy
+         // As long as cycle error has not tripled (OR cycle error grows 
+         // to more than 30 percent of first cycle energy) AND cycle energy
          // does not shrink below half of first cycle energy THEN we add this
          // cycle and grab more.
-         if ((d2t < 2 * d2first || d2t < 0.1 * m2first) && 2 * m2t > m2first) {
+         if ((d2t < 3 * d2first || d2t < 0.3 * m2first) && 2 * m2t > m2first) {
             d2 += d2t;
             m2 += m2t;
          } else {
@@ -541,11 +572,11 @@ static float meandiff2mid(int lambda) {
    m2 = m2 / (float) n;
    if (m2 == 0.0) m2 = 1.0; // No div by 0 on next line
    d2 = d2 / m2;
-   t.volume = sqrt(m2);
-   t.lambda_fit = d2;
+   t.volume = sqrt(m2); // TODO: remove volume
    t.acf_m2 = m2;
+   t.acf_d2 = d2;
    t.acf_len = n;
-   P("%2d %.3f ", ncycles, t.volume);
+   P("%2d %.3f %0.3f ", ncycles, t.volume, d2);
    return d2;
 }
 
@@ -565,37 +596,32 @@ static float meandiff2(int lambda) {
 }
 
 
-static void t_lambda_acf() {
-   if (t.lambda_raw == 0.0) {
-      t.lambda_acf = 0.0;
-      return;
+static float t_lambda_acf(int lM) {
+   float lHat = 0.0;
+   if (lM == 0) {
+      goto bail;
    }
-
-   int lM = t.lambda_raw;
-   int delta = lM / 50;
+   int delta = lM / 50; // Halftone approximately
    if (delta < 2) delta = 2;
    int lL = lM - delta;
    int lR = lM + delta;
    float dM = meandiff2mid(lM);
-   P("%1.3f ", dM);
+   if (t.acf_d2 > ACFD2_MAX) {
+      goto bail;
+   }
    float dL = meandiff2(lL);
    float dR = meandiff2(lR);
-   //P("[(%d)%.5f %.5f %.5f(%d)] ", lL, dL, dM, dR, lR);
    float b = dR - dL;
    float c = dR - 2.0 * dM + dL;
    if (c <= 0.0) {
-      t.lambda_acf = 0.0;
-      t.lambda_fit = 0.0;
-      return;
+      goto bail;
    }
-   float lHat = lM - (float)delta * (b / (2.0 * c));
-   if (lHat < lL || lR < lHat) {
-      lHat = 0.0;
-   }
-   t.lambda_acf = lHat;
+   lHat = lM - (float)delta * (b / (2.0 * c));
+   if (lHat < lL || lR < lHat) lHat = 0.0;
 
-   P("%5.1f ", t.lambda_acf);
-   return;
+   bail:
+   if (lHat == 0.0) t.acf_d2 = ACFD2_MAX;
+   return lHat;
 }
 
 
@@ -628,7 +654,7 @@ void moly_synth_message(struct moly_message *m) {
 
 struct moly_message* moly_analyze(void) {
    t_update();
-   P("%zu %.2f  ", t.time, t.thismax);
+   P("%zu %.3f  ", t.time, t.thismax);
 
    // Silence?
    if (t.thismax < SILENCE_LEVEL || 
@@ -637,12 +663,23 @@ struct moly_message* moly_analyze(void) {
       goto bail;
    }
 
-   // Lambda and lambda. NOTE: We must create a message, so set_message will
-   // take care of when things go wrong and lambda is 0.0.
-   t_lambda_raw();
-   //t_check_octave();
-   t_lambda_acf();
-   set_message(t.lambda_acf, t.volume);
+   // Not silence!
+   t.lambda_acf = 0.0;
+   float d2 = ACFD2_MAX;
+   if (t.prevlambda != 0.0) {
+      //t.lambda_acf = t_lambda_acf(t.lambda_raw);
+      if (t.lambda_acf != 0.0) d2 = t.acf_d2;
+   }
+   if (t.lambda_acf == 0.0 || d2 > 0.1) {
+      t_lambda_raw();
+      float tmp = t_lambda_acf(t.lambda_raw);
+      if (t.acf_d2 < d2) {
+         t.lambda_acf = tmp;
+         d2 = t.acf_d2;
+      }
+   }
+   if (d2 < 0.1) t.locked = true;
+   set_message(t.lambda_acf, t.thismax);
 
    bail:
    P("\n");
